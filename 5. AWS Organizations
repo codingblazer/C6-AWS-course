@@ -1,0 +1,44 @@
+Now in avalara, midgard has separate AWS account and so does other acquisitions and these all our controller by AWS management account of avalara or master account or organization => this master account/org can have organizations units and org units can have multiple AWS accounts =>
+Master account + organization -> org unit -> AWS root accounts. Account creation/OU creation inside master organization inside master account can be done programatically or manually.
+=> Management account has 2 extra features => 1) consolidated billing of all OU and their AWS accounts => this also helps in reducing cost because some discounts from AWS come on using services on greater scale and consilating might achive that much use for discount. 
+2) It has OU level or root account level policies it can apply to multiple accounts.
+
+Any master account can have 2 type of accounts: 1) Payment account in which credit card info is filled and consolidated bill is paid => this is AWS root account only and just one account you will use for payments 2) Linked account => This is the root account that are created for actual use within the master account. 
+In both cases, account are independent and can't access the resources of other accounts.
+
+SCP (Service control policies) => these are the permission type IAM polciy that can be applied to OU or directly to any linked account inside master => If applied to OU, it will specify what things accounts in this OU can do. 
+
+Org API => ORG API can be used by master account to create org, create root accounts inside org programatically.
+
+One benefit of Orgaizations is that you can apply a cloudtail in your managament account and all member accounts will have to follow cloudtail based compliance. 
+
+Lab: Go to AWS org inside Management => we are using our current root account as master/management account => Create organisation and since we are creating org under this account, this will become master account since org is attached to this account and being master accout this acconunt will be used for payments of consolidated bill => You will see root which is where hierarchy starts and we have management account at root which will be our current root account => Add AWS account => give name DCT and email => Now usually when we create any root account like we created ours earlier using email password BUT if we are creating root accounts in orgainization (master account), for these root accounts, we can add a Role inside these accounts called OrganizationAccountAccessRole and this role has admin priviledge for that account which user under that account can assume using sts.
+Add role and create account + verify the email and you should see 2 accounts under root, one management and one we just created. 
+Click root (which is organization) => actions => create org unit => name production and create => Select DCT account now in hierarchy and actions => move => to production
+=> Now at root (which is organization), we have payment account which is master account under this organization and it is master because that is the one who created root above it as orgnanization. Under org, we have OU which has one account which is linked acconunt.
+
+Note that we can create OU inside OU as well. 
+
+SCP (Service control policies)
+------------------------------
+SCP policy are diff from permission policy in a way that they don't tell what is allowed but they tell what is not allowed i.e. they control max available permissions. Now SCP might be applied to OU which says that t2 micro instance are the only allowed ec2 instance => this policy will also apply to child OU under the OU you applied this policy to i.e. we don't need to reapply this policy to childs.
+
+Note that SCP are applied to OU and management account is tied to root and can't be under OU and thus SCP can't be applied to users inside management account. 
+
+Lab: 
+
+How to use OrganizationAccountAccessRole => We can go to right top and choose switch roles and Paste DCT account number, account name and role => We will be taken to DCT root account using the role OrganizationAccountAccessRole we specified in switch role -> Now since we have this role, we have full admin access inside DCT which we are in now 
+
+Now lets create a role inside DCT root account and give s3 access, dynamo access to this role. Now role is like resource and copy the arn of this resource/role. 
+
+Switch back to management account => go to orgnizations => policies => service control policies => enable => Now you will see that there is already a full access policy in there => this policy is applied to root by default and if you see this policy, it has allow all => everything that will be created inside root of organization has full access => we then create additional SCPs to deny specific things and apply them to OU => You can also see this by clicking this full access policy => targets tab and see it getting applied to all accounts including DCT
+
+Create the new policy and remove json and paste the code from: Orgnanizations folder / DenyAccess...  => paste this json policy and in resources, paste the ARN of role resource we createed above inside DCT. 
+
+This SCP policy is not attached yet => go to AWS accounts on left => click production OU => attach policy => any account inside this OU will have this policy applied => we have DCT account and there is this role resource inside it => if you see this SCP policy we applied, it says that for this role ARN, no permissions can be changed, role can't be updated etc => If we give OrganizationAccountAccessRole to any user inside DCT account, he won't be able to add more permissions to this role. We can verify that =>
+
+Go back to DCT account using switch role and OrganizationAccountAccessRole role => Now since you are taking this role, think of you as normal admin of DCT who will have OrganizationAccountAccessRole role given by us at management account => Now with this role, try adding ec2 permission to role inside DCT and you won't be because there is a SCP policy applied to production OU and this DCT account saying that this role can't be updated or permission cant be added. This way we can give admins user even this role in DCT and they will just use what is specified in it and can't update the role or add more permissions.
+You can try creating a another role inside and you would be able to because, that SCP applied only to specific resource which was that role. 
+
+https://digitalcloud.training/certification-training/aws-solutions-architect-associate/management-tools/aws-organizations/ => cheat sheet
+

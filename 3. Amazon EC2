@@ -1,0 +1,159 @@
+VM vs EC2 instance
+---------------------------
+Amazon has physical EC2 host server and inside it has a group of EC2 instances as virtual machines i.e. virtual servers instead of actual physica; dedicated hardware for each EC2 instance. The virtualization on host server and the host server allocation, management is done by AWS itself and internal to AWS. These virtual machines i.e. EC2 instances inside host server are managed completely by the principle who started it i.e. person who claimed that EC2 has root priviledges and can do anything inside it. Also unlike virtual machine where it stores data on host server and when restarted picks that data again, on EC2 instance, any data on EC2 is stored in instance store of host server and unlike virtual machine this data is deleted when EC2 instance is stopped by AWS which is first difference in contrast to normal VM. 
+Another difference is that unlike VM where if VM is not using CPU/RAM, host can use CPU portion of VM that was given to VM but here, EC2 resources are static and can't be used by host server or other running instances even if not used.
+
+Instance type and AMI (Amazon Machine Image)
+----------------------------------------------
+While launching EC2, we have to specify the instance type =>  it is physical hardware configuration/profile of the EC2 you want and then we have to specify the AMI => AMI is the essentially image containing the operating system like windows, macOs, linux and softwares we want to install on top of that and AMIs are created using EBS snapshot i.e. EBS snapshot is point in time backup of the instance. 
+
+Launching EC2 in subnet 
+-----------------------
+See slide 67 if you want => In AWS, principle once authenticated can create resources in different regions. Every AWS region has a Virtual Private cloud (VPC) inside it. And inside VPC, there are multiple AZ. Inside AZ there is a public subnet inside which EC2 instance is launched. If it is a private subnet, we can't access it. => When we launch an EC2 instance, a hard drive in EBS is also attached since EC2 on its own uses instance store and dont save your data. EBS is again a virtual hard drive. Now inside your subnet, we attach any EC2 with a firewall kind of thing called security group which tells what traffic is allowed on this EC2 and where it can call i.e. inbound and outbound traffic. Now since this is insided a VPC, we can't connect to this EC2 directly i.e. ssh since calling AWS APIs (through management console, etc) is fine which AWS can do itself but for us to ssh from open internet to this machine, this instance must be opened and it is done using internet gateway which sits at the VPC layer and helps us connect to instance. 
+
+Now, we can go to EC2 on management console, on left there are options related to EC2 to view them, scaling, etc and on right, there is launch button -> Select the AMI and in this step you can see we can seelct AMIs or from left select any community AMI or even choose any AMI created by us or provided by AWS => Choose linux 2 AMI => Choose instance type as t2 micro => choose defautlts on next page => Choose EBS storage as 8gb => no tags => In Security group we tell protocols which can access our EC2 => we will add SSH at port 22 for linux => and source will be any IP address i.e. 0.0.0.0 => Create a new pair => cloud-labs-mv name => Download and keep safely => Lauch 
+
+For windows, we can choose Microsoft windows server 2019 base which is again free teir => Now for windows we have choose RDP (Remote desktop protocol) to connect to it => but we can do it later => do launch => EC2 home page => see both instances running => click windows one and on left select security groups => find your group, choose inbound rules => Add => choose RDP protocol + choose anywhere and it will add 0.0.0.0 automatically for IPv4 and additional for IPv6 which we can remove => Save => Rename both instances to linux and windows
+
+Connect with SSH or RDP 
+------------------------
+Select the running instance => Click connect => it will show mulitple options => 1) EC2 instance connect => click connect nd it will open AWS sshed terminal into your EC2 directly and you can do whatever you want like 'sudo yum update'
+SSH client => it is giving command to run with key + username and public dns name for instance. (In instance details you will see both public and private IPs, private Ip being IP inside EC2 server host and public IP is just dns name exposed through internet gateway for us to use and thus we will use that and private IP inside VPC we cant access)
+
+Do change the permission of keys file as 'chmod 600 .pemFile'
+
+For connecting to windows launched machine, 1) Choose connect with RDP client and extract password from the .pem file by uploading it => We have to download RDP client and there give these things: computer name will be dns name we were given, enter administrator for username and it will ask for password which you enter the extracted one and we are done.
+
+EC2 Userdata and Metadata
+--------------------------
+We can run shell script on bootstrap and that is called Userdata and script size has limit of 16kb => This we have to give on configuration page and this script will execute when instance has done starting. On windows we can run batch or powershell scripts. 
+Metadata is information about your EC2 and from inside of EC2 you can do curl of server running on EC2 which will give you this information:
+'curl http://169.254.169.254/latest/meta-data' => will give list of fields we can see and choose one and do curl as
+'curl http://169.254.169.254/latest/meta-data/fieldName' => will give value of field
+
+We can use them in lab as: Create new instance and in configuration, enter userData by choosing file in Code/Amazon EC2 folder of course => this script is just querying the metadata server to get instance id and then starting a simple httd webapp server exposing on port 80 of EC2 and asking it to render metadata instance id => create instance and in the security group, add inbound rule for port 80 as http as we will be accessing that port on which webapp is rendering => copy <publicIp of EC2>:80 and see it in browser
+
+Service on EC2 connecting to S3 or other service
+-------------------------------------------------
+1st way => We create a IAM user for the service and inside the EC2 instance, we have configure the access keys for the IAM user => service running on EC2 tries to connect to S3 and thus IAM user configured on this EC2 is used for that (configured using AWS CLI) => this request will be authenticated by IAM if secret is valid + policy evaluation (we should have allow in the policy attached to the IAM user we created for this EC2 and configuted in it) and request is sent to S3 if passed. But this is not safe since if EC2 instance is compromised then he will access to IAM user secrets as well.
+Lab: Run a EC2 => Create bucket 'dct-aws-cloud-labes' (this needs to be unique in the world) => Add some files in bucket => Log into EC2 => it has aws cli installed already and if you do 'aws s3 ls' it won't work since we haven't configured anything => We go to IAM => Select User account any => Security credentials => Generate Access key => on back to EC2 do 'aws configure' and paste key secret as asked => default region us-east-1 => Now we can run 'aws s3 ls' and it will work. We can see that the credentials are present inside the ~/.aws folder  
+
+2nd way => Using Instance profile => Through instance profile we can associate a role to our EC2 and this EC2 will then assume that role and this role will have the policies applied on the role itself allowing to S3 and thus any request from the service running inside EC2 will go through this role and pass if allowed in policy applied to role. This is safe since we are not storing any secrets in EC2.  
+Lab: Inside EC2 => Delete the .aws folder and see s3 command not working now => Go to IAM => roles => create role -> AWS service => choose EC2 meaning that role is for EC2 to allow it calling other services => Choose policy AmazzonS3ReadOnly => Name it S3ReadOnly => Go to EC2 home page and select instance => Actions => Security => attach IAM role => Select our role and save. Now inside EC2 if you run aws s3 ls command, it will work. 
+
+Status checks and Monitoring 
+----------------------------
+on EC2 home page, select running instance and go to Status => left will show system status check meaning hardware is working fine => if not green, means issue on AWS side and wait for fix => On right is instance status check meaning, OS in AMI is able to integrate with network and things working fine and if any issue, you should fix it => on monitoring it shows CPU etc usage and this is shown by your EC2 sending metrics to cloudwatch service in aws => go to cloudwatch and it will show blocks for diff Aws services you have used and you can go to ec2 and see your instance by network and its metrics are present there. Also in EC2 detail page => storage you should see EBS attached and same volume id will be present in cloudwatch under EBS service
+
+EC2 Placement groups 
+---------------------
+These are used to tell how your EC2 instances will be deployed in terms of placement in or across AZs of region => they are of 3 types:
+1. Cluster => EC2 instances are deployed inside same AZ and thus these are tightly coupled and have low latency resulting in high network performance and computation usually used for HPC applications. So we can say that underlying hardware like CPU, disk might be shared.
+
+2. Parition => in this some of the instances are deployed in one AZ and some are partitioned in other AZ. This is usually used for db kind of thing where distributed and replication is used and thus to make it fault tolerant, we keep group of nodes having replicas in other AZ. Ex - haddop, cassandra, kafka, etc. Thus we can say that one partition's underlying hardware is not shared with another partion's underlying hardware. 2 parition can be in same AZ but their underlying AWS rack will be different which is ensured by AWS. 2 AWS racks might be in same AZ but there network and power source are different and thus power failure in one wont fail other. 
+
+3. Spread => in this all instances are deployed in diff AZ in small groups and thus have diff underlying hardware. if one AZ underlying hardware fail, others will still work => so like partition but groups are very small. 
+
+Networking of EC2
+------------------
+1. Network interfaces: There are 3 types of network interfaces that can be attached to the EC2 instance => ENI (elastic network interface), ENA (elastic nw adapter), EFA (elastic fabric adapter) => Now EC2 we launched is inside the AZ and subnet is basically range of IPs we get. => EC2 has one network adapter (NIC) and it take one IP from default subnet and gets private IP for it. And through internet gateway at VPC, this private IP is mapped to public IP. 
+(This thing is much like how generally IP system works => our ISP gets single public IP and then it creates private IPs for us customers and our NIC takes one private IP each => we access internet through our ISP public IP and so does every other customer)
+Now in AWS, we can create multiple subnets inside AZ and our EC2 instance can be attached to multiple network adapters and thus each of these adapter can take IP from any of these multiple subnets. But they can take IP from subnet in the same AZ only.
+ENI => Can use with all instance types and basic adapter when you dont have high performance requirement
+ENA => enhanced networking, higher bandwidth, lower latency -> supports some instance types only
+EFA => high perfomance computing cases like ML, HPC (High performance computing), MPI (Message passing interface) => Can use with all instance types => and with tightly coupled applications.
+
+Lab: While creating EC2, we can specify the subnet in us-east-1a and launch it. After launching you will see in net interfaces (click in left side -> network) you will see NIC attached with EC2 and in details of it you can find subnet id of it, public private IP, etc. Now create new network interface and choose subnet as default one us-east-1a, security group etc and create it => Now we can select this new adapter and in actions select attach and select any EC2 instance and if you go to EC2 detail page now you will see 2 network interfaces attached to it.
+Also you can create one more subnet and use it with this network interface.
+We can also select adapter again and perform detach action and attach it to some other EC2 instance as well.
+
+2. Public, Private and Elastic IPs: Now normallly when you have nw adapter on EC2, it will get a private IP address and public IP through subnet. But this public IP address is a dynamic address i.e. If you shut donw your instance and start it again, it will get different public IP, even though private IP will be same everytime. This is a problem since any other service using public IP if is using in code, this IP might change everytime => Now we can solve this using elastic IPs : 
+We can use elastic IP which is a static public IP and thus does not change. These elastic IPs we get from AWS and can attach to any nw adapter and thus that adapter will not use normal way of getting dynamic public IP but use this static IP always. This means that if somehow our EC2 instance fails, we can do 2 things: 
+a) Detach the nw adapter from the failed instance and attach this nw adapter which has elastic static IP to some other working EC2 instance having same service. Thus this way, other services will be sending the requests to same static IP as per mentioned in their code and requests will start coming up to healthy instance without any issues. But if let say you know that whole AZ is down, we can't solve this issue because nw adapter mmust be attached to any other EC2 instance within the same AZ. We can use 2nd way in that case. 
+b) The elastic IP is a separate entity and itself can be detached + once detached, static IPs can be attached across AZs i.e. we can detach static IP from nw adapter in one AZ and attach it to nw adapter in different AZ => We will detach the elastic static IP from failed instance nw adapter in AZ1 through UI or programatically and attach this elastic static IP to some other EC2 instance running same service but in different AZ which is not down and attach IP to nw adapter of this EC2 instance. Thus this way our services will be talking to EC2 in diff AZ now. 
+Public IPs: used in public subnets, associated to private IP of nw adapter, cannot be moved from one instance to other, free, changes on instance restart.
+Private IP: used in private subnets and public subnets, do not change on instance restart
+Elastic IP: If you don't use it (i.e. it should be attached to some nw adapter at all times) =>  you will be charged, this is also associated to private IP, can be moved bw nw adapters from same or different AZ.
+
+Lab: Go to running instance and in its details see network tab and public and private IP => stop the instance and you will see it no longer showing public IP though private Ip is there. Start it and you will see diff public IP this time. Try doing reboot action => public IP will remain => In case of restart instance, public IP is not lost. On EC2 home page on left in networkling => select elastic IPs and now allocate elastic IP and create => this Ip is now in our account and not being used making us charge for it => select it and action called Associate Ip address => choose nw interface, select the one for EC2, enter the private Ip of EC2 or nw adapter and associate. You can go to nw adapter list and see details showing elastic IP address etc. Try stopping instance and see public IP still shows. 
+Create another instance in diff AZ i.e. subnet from diff AZ => Go to elastic IPs list page => detach action => now associate againa nd this time give EC2 new instance name in diff AZ => You can see it works from EC2 details page for new EC2 
+
+3. NAT or internet gateway mapping of public, private IPs::::::::::: Now we have talked about this earlier that your EC2 instance does not know anything about the public or elastic IP address at all. Even if you do ipconfig, it will show you private IP address. Now actually just like how ISPs work (as explained earlier), here also these private IPs are mapped to public IPs by the internet gateway and thus any packet sent from EC2, it will go as source=privateIp but it will be changed to source=publicIp based on mapping internet gateway has, for the packet. 
+Now also, this is 1:1 mapping and called NAT (Network address translation), done by gateway.
+
+4. Public and Private subnets: See slide 99 =>  Now as you can see we have a public and private subnet inside the VPC. Now each subnet has a routing table associated with it + a configuration which tells whether public IP should be provided to the nw adapter using this subnet by default. Public subnet => See the routing table for public subnet and in first routing rule we are saying that for any packet being sent with destination IP that is lying in the range of IPs defined by this CIDR block (CIDR block is range of IPs and in this case it belongs to all IPs inside the VPC i.e. 172.31.0.0/16), in this rule we are sending it locally meaning this traffic is for internal communication and there is VPC router which takes care of taking these routing action and it will send it to correct IP internally. Second rule says that any other IP (0.0.0.0 means any) should go to internet gateway and thus request will go to internet and get answered. 
+Next thing with this public subnet will be the configuration in which we will say it to assign public IP to any adapter using this subnet.
+
+Private subnet => In the routing table, we can see that we have just one rule for CIDR block and since this is private, we wont give rule for internet gateway. Also, for the configuration we will say that we don't want to give public IP to any nw adapter attached to this subnet since those nw adapter can communicate internally only since private and thus public IP of no use. Also, this tells that for private subnet, even if routing table has internet gateway rule added, because of this configuration it would not have worked i.e. internet gateway would have rejected any packet coming from private IP whoose mapping to public IP it doesnt have.
+
+Bastion Hosts => Now though private subnets can't use internet gateway but private routing table has rule for local IPs i.e. private subnet can talk to any other subnet inside VPC i.e. even if that subnet is from another AZ since they are in same VPC. Now we can send our request from private subnet to some EC2 host/nw adapter in public subnet and that host forward request to internet gateway which will pass and response this host sends back to private subnet. This host is called bastion host and this whole thing can be achieved using VPC router.
+
+Labs: Go to VPC service inside networking from AWS home => in VPCs list you will see one VPC which is default VPC in that region. See subnets from left and you will see 5-6 default subnets, one for each AZ inside VPC. scroll horizontally to right and see column "Auto assign public Ipv4" to yes for all subnets meaning these are public subnets which we can verify from routing tables as well => go to routing tables from left and we will see one routing table because these are created at VPC level for VPC router to use =>  Insidde details of this table you will see rules like that for public subnet we saw earlier. You can find internet gatway id in routing table and see in IG list we have one gateway again because it is at VPC level and that gateway has been given VPC id as well. 
+
+Lets create private subnet => inside north virginia region => choose VPC, choose AZ as 1a and name subnet like private-def-1a => For CIDR enter '172.31.96.0/20' (this is CIDR for subnet we are creating but remember CIDR for routing internally for VPC will be different and for entire VPC) => how to give subnet CIDR => go to all subnets in this VPC and see that they have CIDR as  172.31.0.0, 172.31.16.0...172.31.80.0, increasing by 16 and that's how (we will read more about this later) => Create
+In list of subnets you should see this and on auto assign column will say NO because that is default value when you create any subnet. 
+Now we have to assocaite this subnet to private routing table => create routing table, give name => select this routing table and go to subnet assiciations => edit => select private subnet 
+
+Launch EC2 instances in public and private subnets => In EC2 config page while launching select the correct subnet for both 
+
+Let's try to go inside private EC2 instance => we will ssh into public and from there ssh into private instance => now we will need keys of private inside public instance and thus we can do that using ssh forwarding like:
+
+ssh-add -K privateInst.pem => when in public instance and trying to ssh private, there we wont be needed to provide key of private after this 
+ssh -A ec2-user@<ip of public> => go inside public 
+ssh ec2-user@<private IP> => go inside private without adding any key since you already configured it with ssh
+
+Now here we are connecting our machine (internet or outside VPC) to private instance and thus curl of google i.e. internet on private instance should not pass because bastion host is not set up. Let's see how we do it. 
+
+5. Nat Gateways and NAT instances => Now why would we want private subnet to connect to internet => there are some instances which we want that absolutely no one from outside can access and thus we can't have internet gateway but these instances might want to connect to internet to download software etc => we make them private + access internet i.e. only outbounding through public subnet => this way we can have one directional flow
+Public subnet is bidirectional flow
+Completely private is no direction flow 
+
+Nat Gateway => this is used to talk on behalf of private subnet to internet gateway => now for this to talk to IG, it needs to be on public subnet and thus nat gateway sits inside public subnet with elastic static IP and takes requests from private subnet and sends to IG. For this to work, inside private subnet route table, we add entry for o.o.o.o destination i.e. any => take it to nat gateway and nat gateway function is to forward these packets to VPC router and VPC router will see public route table this time and for any destination traffic, it will go to IG and hence the internet.
+
+Nat instance => Used much before nat gateways => A nat instance like gateway will sit inside the public subnet and it uses a AMI amzn-ami-vpc-nat + we must disabled source and destination checks (VIMP for exam) => this is because, normally any instance will get response only when source sent to it specifically i.e. EC2 was destination and EC2 can sends packet only when it is the one sending it and hence EC2 address is in source => but in this case, EC2 is acting as forwarder of traffic and hence, source is private IP and destination is internet IP and thus, source and destination check which checks that one of source/destination should EC2 instance itself must be disabled because otherwise the check will fail. 
+
+Lab: In our VPC dashboard go to NAT gateway and create => remember to choose public subet 1a => public connectivity => Allocate elastic IP => create > go to route table now and select private route table => Now add rule for 0.0.0.0 to NAT gatway we created => If you now ssh to private subnet instance, ping google should pass.   
+
+
+
+EC2 Lifecycle
+---------------
+See slide 109 => See the different lifecyle states based on actions you perform => stop and stop hibernate are only possible if you are using the EBS volume with your EC2 => if you are using just instance store i.e. no persisitent volume => these wont be available to you. If you stop the EC2, you can then either terminate it from here or start it => terminate means you can't start it back ever and start means that your EC2 will start with same EBS volume and thus you can see data being persistent. 
+
+Stop instance => EBS will remain attached and hence only that will be chargeable + Data is lost in RAM, private IP remains same but public is changed, instance is moved to diff host server and thus if you know that host server this virtual instance is part of is going down, you can stop and start and it will start in diff host server.
+
+Hibernating instance => same as stopping but the data of RAM is not lost because that is also stored in EBS => applies to on demand or reserved linux instances and hibernation must be enabled during the launch of instance => If stopped and started using hibernation, content of RAM are reloaded and this data is deleted from EBS so EBS is back to actual data and all the processes that were running are resumed, instance ID is retained.
+
+Reboot => both public and private IPs are retained + is just OS reboot.
+Retiring Instance => if EC2 instance reaches the expiration set or if host server hardware failure then AWS retires the instance.
+Terminating => delete EC2 and can be never recovered + EBS also deleted unlike stop
+Recovering => cloudwatch can be used for this and it uses all logs and metrics to recover instance + only possible if instance failed due to host server hardware failure + recoverd one is identical to original one if recovered.
+
+Nitro Instances
+---------------
+Nitro system are next generation EC2 instances => other than virtualized instances it also support bare metal instances (i.e. no virtualization and you own the complete host server type physical hardware) and because of this, in case of bare metal, there is extra performance as no VMs running and management of its resources => In case of virtual hardware, these system use nitro hypervisor which enables the EC2 virtual machine to use different hardwares which are specialized for different functions and it is then able to achieve high performnace, security close to bare metal systems i.e.
+
+Nitro cards for VPC => ENA and EFA are nitro based => high network performance upto 100 gbps
+Nitro cards for EBS => enables to use storage as high as 60 TB
+Nitro cards for instance store 
+Nitro cards controller 
+Nitro security chip => more secure
+Nitro hypervisor => enables nitro based functions to work with system in virtual instance case as well
+Nitro enclaves => Highly secure env for sensitive info data processing like financial data, kYC data, intellicetual prop data => uses crypto to ensure that only authorised code runs on these instances, these instances cannot be accessed from outside, not be used with EBS type persistent storage, no external networking and thus makes them completely isolated and uses AWS key management service as layer for additional security. 
+
+Cost of different instances 
+---------------------------
+VERY IMP FOR THE EXAM and better to watch the video itself for this and use the slides from 119 to 127 => Amazon EC2 pricing options video
+
+Tenancy => think of it like tenant in house/hardware => default is multiple tenants or customers in one hardware/house but you can have dedicated one which has only one tenant for house/hardware and is usually costlier.
+
+Exam Cram
+----------
+Good video for revision
+Cheatsheet => https://digitalcloud.training/certification-training/aws-solutions-architect-associate/compute/amazon-ec2/
+
+Todo: From architecture patterns and cram, it seems you got wrong understanding of bastion hosts and they are used for ssh into private subnets for administrators to monitor and this is not possible with NAT gateways but with NAT EC2 servers => check this and make corrections
+Especially see the slide for difference between nat gateway and nat ec2 instance which is somehow relaated to bastion hosts as well
+
+From quiz => EC2 instance give us key pair for ssh which is NOT access key and secret => it is public key for private key of the EC2 instance to allow ssh.
+

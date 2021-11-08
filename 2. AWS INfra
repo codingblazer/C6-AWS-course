@@ -1,0 +1,43 @@
+AWS Global Infra 
+
+1. Region => Geo area with 2 or more AZs, isolated from other regions. => 25 regions currently
+2. AZ => One or more data centers that are physically separate and isloated from other AZs. They are connected with low latency highly available high bandwidth links => you can deploy your resources within a region but into separate AZ for high availability and redundancy => if outage in one AZ, you can still acccess other AZ which in turn is linked to outaged AZ as well. 
+
+3. Edge location and Regional Edge Cache => These are both part of cloudfront cloud network which is responsible for caching the content. These are cached all around the world and users can talk to cached content closer to them becuase less network distance will reduce latency for accessing cached datas. 
+Edge location => around 176 locations in world => cached content
+Regional Edge Cache => These are larger caches and sits between AWS services and edge locations => so any sharing of data between AWS services or edge locations is cached here.
+
+4. Global network => highly available, low latency private global network connecting data centers, AZ and AWS regions. 
+
+Region us east 1-----global private network---------Region eu west 1 
+							|
+							|	
+				Region apsoutheast2
+
+If you live in australia and most of your users are in america, it makes sense to deploy your service and resources in america region since those will be closest to your customers,
+
+------------------------------------------------------	|					------------edge location---users	
+region 													|					|
+	Cloudfront Origins									|---------Regional edge cache-----edge location---users
+			EC2 server running							|--------Regional edge cache-----edge location----users	
+			S3 inside this region storing media files	|					|
+--------------------------------------------------------					-------------edge location---users	
+
+
+----------------------------------------------------------------------------------------------------------------------------------
+Virtual Private Cloud => You can create your private network/cloud inside AWS. Now Avalara cloud for example that you will create will need to be under one single region i.e. this avalara cloud cant have network with some machine from one region and some from other. Now that your VPC or avalara network will be inside one region, the avalara cloud will have different AZ. Why designed like this ? Because we just discussed in last section that you deploy redundant machines across different AZ in case outage happens in one AZ => there must be different AZ present for you to deploy in your private avalara account. Thus in AWS, VPC is designed like -
+
+Region => VPC => AZs
+
+Note that one region can have upto 5 VPCs. for your AWS account. 
+
+Now inside each AZ of your VPC, you can have subnet/subnets which is basically a range of IPs => subnet might be public or private and there can be one or more subnets inside AZ. Now all the resources like Ec2 that you start runs inside AZ which is inside VPC and which is inside Region => Region VPC AZ Subnet Resource => If you havent created any VPC, and start a Ec2 instance in your account, it will use the default configured VPC and default configured subnet inside AZ for running your Ec2 instance inside AZ which you might not even observe. AWS actually has configured a default VPC for every region in your account in case you dont create one and this be used as default one. You can modify this or create new VPC. 
+
+Each VPC has one routing table, one internet gateway and (2 or more) AZ and each AZ having 1 subnet by default when you create AWS account. 
+
+
+
+Doubts so far => 
+1)IAM Server Certificate or Signing Certificate => SSL/TLS Certificate can be used to authenticate with any AWS service => these certificates are recommended to be managed on AWS Certificate Manager (ACM) service. Use IAM only when you mut support HTTPS connection in region that is not supported by the ACM. => practical of this and how ACM works and last line meaning and practical for that also.
+2) 2nd para of STS => practical and what does region means exactly here ?
+

@@ -1,0 +1,106 @@
+IP and Networking Concepts
+---------------------------
+Website hit => DNS server name resolution to public IP => goes to server having NIC and NIC is tied to this public IP (IP can change based on what wifi or internet you are connected to) 
+
+Binary to DOT Notation:----
+192.169.0.1 => IP address and decimal dot notation 
+Each section is oclet of binary => 1 1 1 1 1 1 1 1 <- last bit of oclet is called least significant bit and first one is called most significant
+128 64 32 16 8 4 2 1
+ 1   0  1  1 0 1 1 1 
+ => Using oclet we can have value in dot notation from 0 to 255 => In above representation, wherever there is 1, add that number => 128+32+16+4+2+1 = 183 in dot notation  
+
+Network and Host:----
+x.x.x.x
+Every IP has 2 parts => network and host => Now these network and host bits partition can be different for each IP and thats why each IP has along with it subnet mask which tells how many bits represent network bits and how many represents host bits.
+
+Example: 193.168.0.1 is IP given and Ip has stored subnet mask as 255.255.255.0 => This tells that this IP has first 3 oclets representing network address where this IP will be found and 4th oclet representing host address i.e. which host inside network that we found from first 3 oclets has to send data to i.e. each host inside 193.168.0.0 netowork (this is network ID we get by AND of subnet mask and IP) will have same network ID and different uniquen host ID. 
+
+CIDR notation (Classless interdomain routing) => We can represent subnet mask detail and IP adress together as 192.168.0.1/24 => which tells that first 24 bits are network and remaining 8 bit ofcouse and that will be host.
+
+IP Ranges and Classes:----
+Now normally if you are saying that my networks will be represent by x bits and remaining host by y bits => You can do that according to your needs like how many networks you might want to create and how many hosts you might want in each of those networks i.e.
+
+Let say you are saying that subnet mask for your IP addresses is first 20 bits as network and remaining 12 as host bits => In CIDR notation it is [Ip adress/20] => Now by this you are effectively saying that you can have 2^20 - 2 number of diff networks you can create and each network can have 2^12 = 4094 host unique adresses inside them. 
+
+Classes: Now some of the CIDRs we have reserved as classes =>
+
+Class A => /8 in CIDR => If you want to take first 8 bits as network for your IPs, you can't because such IPs are classified into class A => all IPs in such class have ranges like :
+
+8 bits network => 2^8 -2 networks = 126 networks (first and last are reserved and thus -2) => each network can have 2^24 hosts = 16777214 hosts meaning if network dot notation is 10 => this network will have starting address of hosts as 10.0.0.1 (0.0.0 is reserved always inside network or broadcast address i.e. if destination is this IP address, packet will be sent to all IPs inside the network) + end address inside this network will be 10.255.255.254 (again end address is reserved).
+
+In class A, 10.0.0.0 to 10.255.255.255 IP addresses are reserved for private use and can't be internet facing and all classes have such private addresses.
+
+Class B => /16 => 172.16.0.0 to 172.32.255.255 are private addresses and can't be internet facing
+
+Class C => /24 => 192.168.0.0 to 192.168.0.255 are private addresses and can't be internet facing 
+
+VPC Overview
+-------------
+VPC is logically isolated portion in region (like your own virtual data center) and we can multiple VPCs inside a region (max 5 which can be increased by request) + they might not be isolated by hardware. In Every VPC we have to give block of IP addresses that it will have  and that block is in CIDR notation => we can give something like 10.0.0.0/16 CIDR block to VPC (we will see what IP addresses this CIDR block given to VPC has in next section). VPC has AZs of region inside them and inside every AZ, we can have multiple subnets, public or private but subnet can't be across AZs. Every subnet that we create has to use block of IP addresses that hosts inside subnet will use and these IP addresses must be from the VPC CIDR block only. 
+There is a VPC router which has a routing table attached which takes the packets coming from hosts inside subnet and sees the destination address and based on that routes the packet either to some other subnet inside the VPC in same or other AZ, or that packet can be directed to outside internet and VPC routers sends packet to internet gateway which it is connected to as well. 
+
+VPC is isolated from other virtual networks in AWS and provides complete control over networking inside VPC like VPC IP range selectiong using CIDR, subnet creation, route table configuration, and internet gateways. A default VPC is always created in account with public subnet in all AZ inside that region.
+
+Some terms: (See slide 217) => Read them
+Internet gateway is both egress and ingress meaning bidirectional communication but egress only gateway is outbound only and is used with IPv6 only.
+
+VPC CIDR BLOCKS AND SUBNETS
+---------------------------
+CIDR block example:--  10.0.0.0/16 => the CIDR block is like taking a particular network address and all hosts inside that particular network address will be range of CIDR block => in this example above, we are fixing the network address as 10.0 based on CIDR notation and thus this particular network's hosts will range of CIDR block => all host inside this CIDR block range will be like 10.0.x.x => this CIDR block can have 16 bits for hosts = 2^16 hosts starting from 10.0.0.0 to 10.0.255.255.
+
+Now think of CIDR block as IPs/hosts range for now =>  range will depend on the CIDR notation i.e. /8 means lot of hosts as host bits are 24 and  /12 means lesser hosts as more network bits. Now, there are some rules and recommnedations by AWS on choosing the CIDR block for your VPC. VPC itself does not care about this block, it is just for use of subnets inside VPC which can take IP blocks from all the host IPS available in VPC (10.0.0.0 to 10.0.255.255 in above example) and thus any actual networking happens through subnets and VPC CIDR block does not even take part in networking =>
+
+Rules:
+CIDR block = range of IPs defined in form of /
+1. CIDR block can be between /16 and /28.
+2. We can add more than one CIDR block to the same VPC.
+3. CIDR block once created can't be modified by increasing or decreasing block size.
+4. The first four and last host IP in CIDR block are not usable as they are used by AWS.
+
+5. It is recommended to use private IP ranges for your CIDR block i.e. we discussed that each class has some private IPs not open to internet i.e.
+Class A (/8) private IPs are => 10.0.0.0 to 10.255.255.255 => As per rule one, we can have /16 to /18 only => we can choose CIDR block as 10.0 or 10.1 or 10.2 or ....10.255 => and whatever we choose among these as CIDR block, it will have 16 hosts bits = 2^16 hosts or IP range. 
+This class is mostly used with VPCs CIDR blocks because they provide large number of CIDR block options with large number of hosts.
+If you know you want to be using this much host, you can instead choose /17 or /20 as well => in that case, take any value of first 20 bits such that they fall in private range and thus your VPC have hosts = 12 bits = 2^12 but we wont need it usually.
+
+Class B(/16) => private IPs are => 172.16.0.0 to 172.32.255.255 is private range => we can choose /16 => if you see the private IPs, the range is half available and it is difficult to deal with and hence usually avoided by people since using Class A private are easier to visualize but anyway => CIDR block available will be 172.16, 172.17,....172.32 i.e. 12 options for CIDR blocks and 16 bits for hosts in any ONE you choose => choose one these as CIDR block. 
+Or we can use /17 and we will now have 16*2 = 32 CIDR block options instead of 16, each having 15 bits for hosts or 2^15 hosts.  
+
+Class C (/24) => private IPs are => 192.168.0.0 to 192.168.255.255 => We can choose /16 here as well => but only network available in private IPs for /16 is 192.168 => we have only one option of CIDR block and if you see last 16 bits are full available in private range and thus we can have 2^16 hosts inside the CIDR block. 
+
+
+6. CIDR block must not overlap with existing CIDR in the same VPC. We can have another VPC created using same CIDR block since these are private IP blocks not internet facing and nobody is sending packets to these IPs, so we can reuse them => but this is not recommended since when you do VPC peering between these 2 VPCs, there will be clashesh and it wont be possible. Thus try even making your diff VPCs with diff CIDR ranges of IPs. 
+
+
+
+VPC SUBNET EXAMPLE:--- Now the subnet inside VPC can take block of IPs from the VPC IPs only => Let say out VPC CIDR block is 10.1.0.0/16 => it means that first 16 are particular network and can't be changed and last 16 bits are actual hosts IPs subnets can take a block from. i.e. 10.1.0.0 to 10.1.255.255 => Let say our subnet needs 255 hosts IPs => Let's pick a first block of 255 IPs i.e. 10.1.0.0 to 10.1.0.255 => if you see we can repesent this as well in CIDR block notation => 10.1.0.0/24 => this means that we are booking first 3 oclets for network and 8 bits are for host = 255 hosts =>
+
+We can always use CIDR block for subnets => 10.1.0.0/17 => this will mean that we are taking one bit of host and that will tell which block of (32-17 = 15 bits) 2^15 hosts we want to choose => this is not reducing number of hosts we had in VPC, it is just helping us choose ranges =>
+
+10.1.3.0/18 => this means that we are using 2 bits for network => In VPC we had total of 2^16 hosts => Now, let's break these hosts in 4 blocks as:
+
+2^16 /4 = 2^14 => 4 blocks of 2^14 are equal to all number of hosts in VPC 
+
+Now come back to 10.1.3.0/18 => this is telling that first 18 bits are fixed and remaining 14 bits are for hosts = 2^14 hosts same as block we created above => Similarly we have other 3 of 4 blocks we cna refer as =>
+
+10.1.0.0/18 => first block of 2^14 hosts
+10.1.1.0/18 => second block of 2^14 hosts
+10.1.2.0/18 => third block of 2^14 hosts
+10.1.3.0/18 => fourth block of 2^14 hosts
+-------------------------------------------
+total of 2^14*4 hosts = 2^16 hosts we have in VPC => we can give ranges to subnets on what all IPS they need in form of CIDR
+
+Ex - if we give 10.1.0.0/16 as CIDR to subnet inside our VPC => it is like saying that this subnet will have all the 2^16 hosts inside it i.e. all hosts of VPC
+10.1.0.0/17 and 10.1.1.0/17 are 2 blocks of 2^15 size
+
+Thus we can say that subnet will always have a CIDR value equal or more than VPC CIDR value.
+
+We can use website like this for help with this: https://network00.com/NetworkTools/IPv4AddressPlanner/
+https://forums.aws.amazon.com/thread.jspa?messageID=954311 => read this for insights
+
+See slide 224 => We are creating 6 subnets in 3 diff AZ, 1 public and 1 private subnet in each AZ => Each subnet will have 255 hosts (and VPC CIDR is 10.0.0.0/16) and thus if we want, we can create total of 255 subnets like above each having 255 hosts but we have created 6 for now. Note that subnet can't have overlapping IPs so plan it out carefully how you want them to be.
+
+Pubic cs private subnet => as you can see we have option called autoassign public IPv4 for subnets => We can set this and subnet created will be public subnet meaning that all IPs in subnet will have private IPs of VPC but AWS will map one public IP to each of private IP inside subnet. 
+
+Now resources like EC2 can come and attach there NIC to any IP inside public subnet and talk to outside world.
+
+

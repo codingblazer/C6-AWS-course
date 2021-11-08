@@ -1,0 +1,116 @@
+Elasticity means that we can expand our resources when need arise like CPU, etc and contract them when need goes away and this is usually the benefit of cloud that it provides elastic services and thus, you dont need to buy more hardware as you can contract based on need and you pay for what you use.
+
+Scaling up/Vertical scaling means adding more resources like cores, RAM to the same instance. This however makes it single point of failure since we are using same one instance to feed our needs. Also, there is limit to how much we can scale up at some point. Ex - We have t2 micro with app and on load, we update the instance type of same node to c5.xlarge instance type.
+
+Scaling out/horizontal scaling => In this we add more nodes or instances of same type and all have our application working together and thus there is no one point of failure. Also there is not limit to how much we can do scale out. Ex-  We have t2 micro and we add more t2 micro having our apps.
+
+Scale in => downscale
+
+EC2 Autoscaling Group
+------------------------
+Used for horizontal scaling => One ASG can have multiple EC2 instances in it and these EC2 instances can be from diff subnets and diff AZ i.e. One ASG can spread across AZs => Now when we ask ASG to launch given number of instances, it generally spreads them across diff AZs itself for better fault tolerance. It helps in 2 functions: 1) If the node fails in ASG, the status check for it will fail in cloudwatch and ASG will know and thus it will bring up a replacement for it 2) We can ask it for autoscaling based on conditions like if CPU usage of all nodes together is > 80%, launch new instance and thus it will upscale and when this condition is no longer applied, it downscales to save you money AND this is the elastic aspect of EC2 using ASG. Again it know about this condition through cloudwatch metrics based on performance like CPU usage or we can have a schedule specified and these are given inside the scaling policies:
+This policy is given through launch templare or launch config. We are gonna use launch template only but launch config is same as launch template, it just has less number of things you can specify: See slide number 145 which shows different options in both template and config => for example we can configure health checks for EC2 instance like if some service on instance is down, then consider node as failed and restart and then there are default health checks based on hardware failure. Now similary for ELB used with EC2 can have ELB health checks + it can do EC2 checks along as well so it knows that target it is sending to is active. There is another property called health check grace period which tells the time ASG should wait before doing health checks since it might still be in bootstrap phase and health check will be failing and we dont want ASG to replace it because of that.
+
+Monitoring properties for autoscaling => 1) ASG group metrics are sent to cloudwatch every 1 min and it should be enabled since its free 2) Basic EC2 monitoring metrics are sent every 5 mins granulity and it is also free 3) Detailed EC2 monitoring is done every min and it is chargeable. 
+
+Additional Scaling properties:
+Health grace period => already explained
+
+Cooldowns => ASG must operate in 5 mins intervals or cooldown periods since bringing up or down of instances can take some time and ASG should wait on doing any new actions before its been 5 mins than previous set of actions it performed.
+
+Termination policy => when downscale or scale in happen, which instance to terminate first
+
+Termination protection => when scale in happen, which instance not to terminate
+
+Stand by state => We can put a active in service instance to standby state and it will be just standby and from there we can do troubleshooting or update the instance and start it back wihout it losing anything like public IP will also retain.
+
+Lifecycle hooks => we can say that when scale out action is issued, pause the launching instance, do something like script etc before it is set active and then set scaled out new instance to active. Similary, we can say that when ASG issues scale down, before terminating the instance, do some action like sending logs etc and then terminate the instance. 
+
+Lab: On eec2 home page, on left select template and create => select AMI, key pair already created one, VPC, security group, default storage EBS volume, no need to add network interface as it will add automatically, Advance details has most of the options like request spot instances for scale out, and much more => Now inside user data, paste the script inside  Autoscaling and ELB folder/ user-data-az.sh => paste it, this script is gonna expose port 80 webapp and print AZ in which EC2 instance is present. => create
+
+ASG on left side of EC2 home page and create => choose your template => If we Choose "combine purchase options and instance types" and it will use the spot instances for scale operations and ask for details => try it => But lets choose default one => Select multiple AZ 1a,b,c => No load balancer for now, EC2 monitoring, check the "enable group metrics which are ASG metrics" => desired =2, min=2 and max=4 => desired is what we start with and max is how much nodes ASG can add when performaance or schedule based conditions break => when downscaling instead, it should not go beyond min of 2 => desired must lie in min max range => no scaling policies => next next create => as soon as you go to EC2, you will 2 instances coming up => In ASG details -> Activity tab we can see it issuing launch activity => See instance management tab => we can perform actions on these instances like putting them on standby, scale in protection (dont terminate this while scaling down), configure lifecyle hooks below, create warm pool which are ready to go instances from scale in operations and can be taken in case they are needed back for scaling out.
+In monitoring tab, we can see the metrics of group as well as EC2. Instance refresh tab, in this we can refresh any running instance =>   
+
+Load Balancer 
+--------------
+Has a public Ip exposed where users of the app hit and load balancer will distribute the load among the servers connected to it => Now even if any node fails, load balancer will direct the traffic to other nodes for that user => high availability => the other way it enables high availability and fault tolerence is because, load balancer can sit across AZ and thus, we can have our nodes in diff AZ (diff physical data center) and thus high fault tolerence is achieved. We generally use load balancers with ASG because ASG ensures that if node fails, it is replaced by ASG and if even whole AZ fail, load balancer will direct traffic in other AZ and thus these 2 make system highly available and high fault tolerant. 
+
+Note that only one subnet can be used per AZ when working with ELB. Also it should be atleast /27 subnet and should have 8 IPs min for ELB to scale. 
+
+Types of load balancers:
+1. ALB application load balancer => this operates at the layer 7 of network i.e. http, https, ftp (IMP), grpc => we can inside this specify routing of traffic based on hostname of website, path parameters of website, query params of website, http header based routing => the target for these routes can be Lambda function, EC2 instance, IP addresses, containers. Does not have static IP address,
+Use this when we have webapps on layer 7, microservice architecture i.e. docker containers, lambda targets 
+2. NLB network load balancer => this operates at the connection layer 4 => it listens on TCP, TLS, TCP/IP, UDP (IMP)=> offers ultra high performance, low latency, and TLS offloading at scale (IMP to know for exam) => target is EC2 instance or IP => Has static IP address.
+Use this when TCP or UDP based applications and you need low latency and static IP.
+3. CLB classic load balancer => ALB and NLB are new generation and even AWS ask not to use this old generation one => routing based on layer 4 and layer 7 but it does not have any intelligence of its own. 
+4. GLB Gateway Load balancer => new and IMP => it is used on top of virtual appliances like intrusion detection systems, intrusion prevention systems, packet inspection systems, firewalls => operates on layer 3 and listen for packet on all ports and forward them using geneva protocal to the targets.
+Use this when working with firewalls, DDOS ssytems, intrusion systems, etc.
+
+Routing with ALB and NLB => See slide 164 and 165 => 
+In ALB, client enters the http path and that is load balancer public IP and are sent to load balancer => on load balancer we can add http listener and they have path based, host based etc rules => based on rule, the request is routed to one of the target groups. Each target group can have nodes from diff AZ so that even if one of AZ fail, some other AZ can take that request coming to target group. It is target group which is responsible for sending request to one of target node.
+In NLB, client can hit url with diff ports and on NLB we define listeners for diff protocols type like UDP etc and rules for port => NLB then routes the request to target node using the IP protocol and for IP protocol to work and distribute the packet, there is elastic IP (NLB node) sitting in every subnet. Target node can be IP, instance or even outside the VPC called on premises-nodes. 
+
+Lab: 
+Create target group for ALB => on ec2 home, on left select target group inside load balancing, create, instances (IP type is used for docker containers), http and port 80 is default, health check for target group => alb will hit this path on nodes of target group and if get 200 status, then consider the node as healthy => dont include running 2 instances we have in this TG and create TG
+
+Create TG for NLB => on ec2 home, again create TG, select TCP and port 80 because website will still be port 80 but we will be just capturing tcp packets instead => now health check for this can be http request and do like above and create 
+
+Setup NLB load balancer => Create 2 elastic IPs which we will need for load balancer => Go to load balancers, create, network load balancer, internet facing, for 3 AZ => for each of them select public subnet for each of them + choose "Use an elastic IP address" => you might see 2 having same elastic IP so select different one for each of them => Listners must be unique combination of protocol + port => TCP 80 we will route to NLB target group we created => create => view load balancers => we can see public DNS name in details for load balancer => Now go inside NLB TG and there are no instances inside it => we will tie this TG to ASG => Go to our ASG and edit => load balancing => and add target groups => add this NLB TG => now if you view this TG it will show instances of ASG => Now once nodes in TG are healthy, go and hit NLB public DNS name in web browser and you should see webpage showing AZ of EC2 instance where request went to and if you remember, we did setup user data script to show this webpage in each ec2 instance. 
+Now if your company has a firewall and it only allows some whitelisted IPs, then if you try to connect to this website over TCP at this port and if you hit NLB DNS name, you won't be able to access it because what NLB is doing is, it is returning one of the elastic IP back for DNS name and that IP won't be whitelisted by firewall => these 3 elastic IPs must be added to firewall in such a case and we can do that since these IP will never change. 
+We can also do dns lookup on NLB DNS name and we will see 3 elastic IPs it is connected to => You can hit each of those IPs in browser (and 2 should work since we have 2 nodes and thus 2 AZ would be in use and thus 2 elastic IP) => you should get diff AZ in webapp for them. 
+We can delete the NLB now, TG does not cost so dont worry, release the elastic IPs since now they will cost since not being used by us
+
+Setup ALB => Go to asg and edit and change the TG to ALB TG => go to TG ALB and see instace coming up on refresh => go to load balancer => application => create => http port 80 => for 3 AZ, select public subnet for each of them => next, select security group => choose TG => Create => We should see in TG that instance are healthy now which was in unused state earlier => In load balancer details copy DNS name and hit url and you see AZ of node that answered, refresh and it will show diff AZ => let see how to do routing => Create instance and add a script in user data present in folder Autoscaling/user-data-app-group => this is adding route to our webapp => create a new TG2 and inside it include the instance we just created => Inside TG you will see this instance as unused since this TG is not attached to any load balancer => go to our load balancer and in listeners => do view/edit rules => select + => insert rule => add condition query string => AppGroup key and A value => add action forward to TG-ALB  and add another rule with query as AppGroup key and B value with forward action to TG-ALB-2 we just created. Rules are applied in order they are shown. Hit the ALB url and add http above it and add query params A and B and try => in case of A, on refreshing url we should see diff AZ since its target group has nodes in 2 AZ but in case of B param, it will go to target group 2 having one node in one AZ and thus on refresh, it will still show same AZ.
+
+EC2 Scaling policies 
+---------------------
+1. Dynamic scaling => Target tracking => ASGAverageCPUUtilization =  60% => whenever average in group passes 60, ASG will add node to bring CPU utilization to 60 and for these new nodes, until their warm up time is not passed, metrics wont be sent to and ASG does not act during this time + once all started again cloudwatch sends metrics to ASG every 1 min.
+2. Dynamic scaling => Simple scaling => in this case if condition is >=60% => whenever it crosses a 60% alarm went off and ASG will act by adding nodes but here next autoscaling action cant happen until 5mins has passed.
+3. Dynamic Scaling => Step scaling => In this we tell that if >60%, alarm went off and average is 70 then launch 2 instance but average is 80, then launch 4 instance => based on current average, we add number of instances.
+4. Scheduled scaling => let say you see a slowdown at 9pm daily bcoz customers come at that time => you can give time, min, max and desired nodes and it will try to keep desired number of nodes at this time.  
+
+Lab: Go to ASG1 => Autoscaling tab => Choose dynamic scaling policy => target tracking and value as 60 and create => Now go to both your instance and connect and open in diff tabs => inside them run commands in folder Autoscaling/install-stress... => once done, we can now go to our instance and monitoring tab and should start seeing CPU usage go up (also in ASG activity tab we should see it receiving alarms for this) => we should now see the instances coming up and also these instances since are scaled by ASG and ASG has target group which it is inside of and TG is used in load balancer and thus these instances will automatically be tied to load balancer. 
+Delete the policy we created now and also in ASG details you will see that desired has become 4 now because it was updated by the policy on CPU load to max it could have done which was mentioned in ASG as 4 and ASG did autoscaling when desired changed to 4 and thus we will change desired back to 2 now. 
+
+Cross Zone Load Balancing 
+-------------------------
+Now in both ALB and NLB, there are load balancer nodes at each subnet. See the slide 178 and 179 => In 178, when this option is disabled, then the both ELB nodes get equal traffic and inside subnet if there are diff number of nodes, the overall traffic is not equily distrubuted across all nodes as shown in 178. Now if this is enabled, then each ELB node will not just forward the traffic to their subnet nodes but also to the other subnet nodes equally => this way the traffic will be equally distributed among all nodes as shown in 179. 
+
+This option is enabled by default in ALB and is DISABLED  by default in NLB but can be enabled. 
+
+Session State and Session stickiness
+-------------------------------------
+Now usually we dont store anything on EC2 reason being they can fail and data will be lost and also load balancer can take user to some other node next time and data wont be of any use to that user now => stateless EC2 makes it easy to work with load balancer => But what if user has authenticated and his session data is to be stored => we can store in elastic cache, dynamoDb, S3 kind of external storage to store session data and when any node fail and user request go to another instance, instance can get session data from external storage and user dont have to re-authenticate.
+
+Sticky sessions => Now in this technique, client cookie stores the info on which EC2 instance has served it before and load balancer will make sure to send this client requests to instance mentioned in cookie and thus this way, we can make sure that session data is stored on EC2 and use that to verify authenticatio without need for re-authentication. This works perfect to solve load balancer issue but in case where node fails and request go to another node, there will be no session data => to solve this we can use session state store => we can store session data in both EC2 and external storage, if sticky session works, it will help with low latency and if it doesnt work due to node failure we can get session data from external storage at cost of some latency.
+
+Lab: we should have 2 instances running under TG1 => go to TG1 => attributes tab => Here we can choose load balancer alogirithm which is round robin by default => we can also choose least outstanding request meaning that it will send request based on load of EC2 instance => there is also option for stickiness => and we have 2 types of cookie under it => load balacer cookie, application cookie => both are same its just that load balanc cookie is always named same and thus if you use multiple load bal, it might get confusing => in application, we can give name => create load bal one => Now if you hit url and reload, AZ wont change
+
+Secure listners on ELB 
+-----------------------
+Now usually our customers connect to us using SSL/TLS certificate for secure connection using https => we can do this using ACM certificates => Now in ALB case, since it is in layer 7, the data comes encrypted and data has path related info and thus it needs to be decrypted. Now from here, data can be send in unencrypted form to backedn or we can create another new connection and encrypt data for it and send to backend for end to end encryption. => In ALB, 2 connections are needed.
+
+In case of NLB, since it is layer 4 and routing is based on protocol and port, data does not need to be decrypted and thus we can use single connection that goes from client to load balancer and load balancer to backend with decryption taking once at end. We can however do ALB type thing here as well if we want.
+
+Lab: Create secure listener for ELB => we will register a certificate in certificate manager service => Request a public certificate => enter domain name (we already have some domain name registered in route53 with cost $12) => copy it and paste => do email validation and whatever email you gave for domain name will get email to confirm => Confirm and certificate is created and now we can go to our load balancer and add new listener https on port 443 and select this certificate below and also add a rule to route everything to TG1 (we can also give load distrubution here) => Create + Also make sure to add this load balancer dns name to your domain name aliases => Now in the security group we are using add a inbound rule for https 443 mappped to coming from anywhere should be allowed.
+
+We can visit the site with https and it should work and we can also see the certificate that it is issued by amazon.
+
+Clean up resources 
+------------------
+Delete ASG, Load balancers, elastic IPs disallocate, 
+
+Exam Cram 
+-----------
+See the video though many concepts are not there
+
+Cheat sheet
+-----------
+https://digitalcloud.training/certification-training/aws-solutions-architect-associate/compute/aws-auto-scaling/
+https://digitalcloud.training/certification-training/aws-solutions-architect-associate/compute/elastic-load-balancing/
+
+
+Check 
+-------
+Note that only one subnet can be used per AZ when working with ELB.
+See architecture pattern 3 => how does ALB work then i.e. how are we able to connect to ALB based application in company ?

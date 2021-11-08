@@ -1,0 +1,106 @@
+Identity and Access Management => to access AWS accounts securely by principles. IAM service => service through which principles must be authenticated and authorised. A principle is person or application which can make request for an operation on AWS resources. And IAM policy is used to determine whether person is allowed to make this request or not. Whatever resouce we create like user, modify, delete etc is done by making API calls to API.
+
+IAM POLICY
+----------
+can be attached to a user or group or role or Resource but generally in case of user, we put user insidee group and apply it to group:
+
+1. Identity based policies => applied to user, group or role telling what they can accesss and how much => if not applied, principle can login but cant do anything => Example => S3FullAccess policy inside which we have granted some things to s3 and denied some to s3. These documents for policy are written in JSON. All permissions are denied by default i.e. if not granted, then denied automatically. The most restrictive policy is always applied. We can attach these policies to principles in 2 ways: 
+a) inline => in this case policy is 1:1 to principal i.e. policy cant be applied to multiple principals like multiple roles but only one role or one user or one group. If the principal is deleted, the policy will also delete. 
+b) managed by AWS or managed by customer => these are stored on AWS or customer end => these are stored separately and are not attached inline to one principle and thus if principle delete, policy still remain => can be applied to many principles at same time. 
+
+2. Resource based plicy => applied to resources like S3, dynamoDb that this db is allowed to this users list, etc. We mention arn of users this resource can be used by + what all actions we are allowing for them on this resource + specific resource object arn i.e. s3 bucket arn.
+
+Principles 
+------------
+1) IAM User => User is a person or service =>  
+User can be assigned => 1) Access key ID and secret access key for programatically accessing AWS API, CLI, SDK and other development tools of AWS or a 2) Password to access the management console which is AWS web app i.e. non programatically. Each user has a friendly name like Sachin and ARN (Amazon Resource Name) which uniquely identifies the user across AWS constructed as:
+
+'arn:aws:iam::<account numb>:user/<friendly name>'
+
+By default, user can access nothing in AWS until root user assigns some IAM policy giving permissions to any IAM user.
+IAM user accounts used by service/application are called service accounts.
+Best Practices for user related things => 
+1) Dont use root user credentials => create a IAM user, assign it admin permissions policy for things you want and use that. 
+2) Dont share or put root user credentials anywhere in the code.
+3) Enabled multifactor authentication.
+4) Create separate user IAM accounts for different users i.e. don't make multiple users share the same account.
+5) Password policy can be defined to enforce password length/complexity for all users.
+6) Use groups to assign permissions to user i.e. add user to some group which has permissions needed by your user or create new group with new policy if not present. 
+7) Use principle of least priviledge when assigning permissions. 
+
+
+2) IAM Group => collection of users => we can apply the IAM policy to a group as well => Example is different departments in your company has different permissions on what they can do on AWS, for example Developers, AWS Admins group, Operations group. Note that user or group can have multiple IAM policies.
+Group is not an identity and thus cannot be identified/mentioned while creating a IAM policy. You can create IAM policy without mentioning group in it and then attach this policy to the group. 
+Note that groups cant be nested i.e. there cant be groups within groups.
+
+
+
+3) IAM Role => Roles are assumed by the trusted entities and can be used for delegation. Roles are like a hat that any service (let say EC2 instance) or IAM user within your AWS account or IAM user in some other AWS account can wear and thus gain permissions defined in that role to access AWS resources like S3 full access => So usually we create roles like s3FullAccess, AWSLambdaExecutionRole and assign them to any service we have up running so they can access s3 write without using permanent credentials like username and password. This is generally done for services i.e. let say Ec2 wants to access s3 and now you have to give credentials somewhere in your service to access s3 but instead it can be assigned role since it is within AWS only without need of mentioning security credentials in your code. 
+
+Policies for role => There are 2 type of policies that can be applied in case of role => 
+1. Trust policy (Resource based policy) => in this case, IAM roles itself is a resource and thus trust policy tells who can assume the role (a resource).
+2. Permissions policy => This is applied on the principle to tell what is allowed and what is denied. 
+
+Authentication Methods
+------------------------
+When we create a AWS account we get a root user credentials which is email and password called root user credentials. Root user has full admin permissions and these cannot be restricted by anything. Root users can add users, create groups, policies etc. Any AWS root account can have upto 5000 IAM users.
+
+1) Access Key => for programmatic access => KV pair => Access key id and secret => You will need it when using CLI or AWS API or SDK. You can add MFA protection to API operations your service is making. These access keys can be created, modified, viewed or rotated. => When you create them, IAM returns the access key. If the secret part for the key is lost, you have to create a new key again. You can just view the key id part. User can be given access to change their own keys through IAM policy (not from the console). 
+
+2) Password => IAM user => on AWS Management console i.e. UI => Can add MFA here too => IAM users if they want to change password => allowing your IAM users to do so can be controlled by attaching the policy for this to this IAM user.
+
+3) IAM Server Certificate or Signing Certificate => SSL/TLS Certificate can be used to authenticate with any AWS service => these certificates are recommended to be managed on AWS Certificate Manager (ACM) service. Use IAM only when you mut support HTTPS connection in region that is not supported by the ACM.
+
+Best practices for Access keys => 
+1) Ensure access keys and secrets are stored securely.
+2) If some service is compromised => you should first destroy the access keys associated with that service and recreate them maybe.
+3)
+
+AWS Security Token Service (STS)
+----------------------------------
+Let say User Sachin is in Account A of AWS and Ankush is in Account B of AWS. Now, Sachin wants to access s3 in account B and thus one way to go about this is, sachin will assume the role (which will be inside account B), the role which will have permission to access S3 => Now how this role thing works in the backend is => using the STS => Sachin assumes role R in Account B => Role connects to STS service inside the account B to provide a temporary, limited priviledge credentials for IAM User Sachin (called federated users) or for user in Account B itself. STS provides back these credentials to user Sachin and Sachin access S3 directly using these temporary credentials. 
+
+STS is AWS region wise service => if STS is not enabled in particular region and credentials are requested in that region by the user Sachin, it will be denied. All regions are enabled by default. Once credentials are given, these credentials will work in all regions/globally even if region of user is denied.  AWS STS is single endpoint where all global/any region request comes to => https://sts.amazaonaws.com/ 
+
+Another example: Now as we know that for roles, we can apply trust policies and permissions policy => Let say we are applying both trust policy and permission policy on role R => Inside permission policy we can tell that this role R can access S3, etc and inside trust policy we can tell that all EC2 services principles have access to sts service assume role API action => 
+
+Let say we have an app on EC2 and it wants to use S3 => Through trusted policy of role R, EC2 is allowed to perform action sts:assumeRole => it will call sts API and get back credentials response. Now sts will know through permissions policy of role R that credentials role is asking for should be only for s3 => s3 credentials are returned (accesskey, secret, expiration, and sessionToken) and role will provide that to EC2 which will use it for accessing S3.  
+
+IAM Policy - 2 (Evaluation logic)
+----------------------------------
+User wants to access S3 => through console, CLI etc make request => goes to IAM for identity or authentication => request has principal who sent request, actions user want on S3, resource, resource data like actual S3 bucket and env data like IP address etc => IAM evaluates all the different types of policies applicable to this scenario and after this evaluation process tells if user can do that action or not. Types of policies:
+Identity based, resource based, IAM permission boundaries (Admin type person can tell what all actions can be specified under identity based policy), AWS org service control policy (what all action/permissions are allowed under organisation in AWS account), Session policies (used with assume role related permissions).
+
+Thus how are final permissions evaluated =>  
+
+Identity based policy and resource based policy applying on entity like we saw in STS => both will be added 
+Identity based policy and permmission boundary => intersection of both will be used since permission boundary has more priority
+Identity based policy and Organisation level permissions => intersection of both since organisation are more priority
+
+Priority order or evaluation logic chart can be seen in slide number 42 => VERY IMP =>
+
+Deny all > Organization SCP > Resource based policy > IAM permission boundaries > Session policy > Identity based policy 
+
+Policy Structure in JSON => Examples => See 49 to 53 slides (should be self understood)
+
+IAM Policy simulator => For multiple users, we can add policies and run it and see all permissions that are allowed and denied on the right side => Very good tool for knowing if policies are evaluated as we wanted. 
+
+
+ACCOUNT SETUP LABS FOR ABOVE THEORY
+------------------------------------
+
+Best Practices => 
+1) Dont use root account ever unless billing information changes. Use IAM user account for everything. 
+
+Modify Sign in Link 
+=> Go to services and IAM service => It will show IAM users sign in link which you can use to login => But you can modify this by Customize option. =>
+https://codingblazer.signin.aws.amazon.com/console
+
+Setup Billing Alarm => Only root user account has access to modify billing information. Go to top right Account name => My billing Dashboard => Billing preferences from left pane => Check the option => Receive Free Tier Usage Alerts and Recieve Billling ALerts => Click the link o Manage Billing Alerts which will open cloudwatch service => Left pane under alarm, select Billing => Create Alarm => Check metric name is Estimated charge and set the threshold limit as 10$ at the end and Next to step2 => Setup topic under SNS =-> SNS is notification service which sends notifications to configured emails => Create the topic for the alarm, choose Create new topic option => give name "Billing xyz" => Basically this is reusable topic that can be used with SNS to send notification for same emails for similar alarms. Next and give alarm name, review and create alarm.
+It will show message that SNS does not send notification until subscription is done => emails that you have configured with SNS will get email asking their confirmation that they want to receive these emails. Once confirmed it will show as confirmd in the SNS console.
+
+Setup MFA for root account => Though you can give IAM user full admin access but still it will not get some things which are under root only like billing. => Go to IAM console from AWS services => Click link for Enable MFA => Will open Security Credentials screen => Click Activate MFA button => Authentication is usually based on 1) What you know (password) 2) What you have (device => MFA) 3) What you are (Biometric). 2 factor authentication means using 2 of these => we are using password and device => Virtual MFA device option => QR code => Google authenticator on your phone => On app, do + and add QR code and its added. Enter top 2 codes and MFA is done. You can now see manage button there which can be used resynch or remove. Signout and check it.
+
+Create IAM User => IAM console => Users on left => New User => Name, Access type select both, Custom Password give, Require reset uncheck and Next => Add User to group => User should be added to some group => Since no group so far, create group => since this user will be admin user as proxy for root user => name group as AWS-Admins => Apply the Administrator policy which will give full access to users in this group => You can expand Administrative Access policy and select JSON to see what this policy allows => Allow, action like read/write on resource like S3. => Create group => Select group if not so that user is added to this => skip tags, review and create. => copy the secret and key id for access key => once seen, you can never see the secret again so copy somewhere safe => Can check the created user and group in the respective user and group tab. Sign out and sign in to before account => account alias as codingblazer => and give credentials for new user account => SachinA and password.
+
+Setup Password Policy for IAM users => IAM console => Account Settings => Password policy => Change password policy => Expiration, restrictions, etc. => this policy does not apply for the root user account password => Enabled MFA on not just root but also for all IAM users too => 

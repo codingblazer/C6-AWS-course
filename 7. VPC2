@@ -1,0 +1,166 @@
+Lab: Create VPC using VPC wizard => Go to VPC from Amazon services => Launch VPC wizard => ready made options for you => 
+Choose VPC single public subnet => Select => it will use /16 for VPC and /24 subnet => can select AZ for subnet etc
+Choose VPC with public and private subnet => in this you will also get NAT gateway so that private subnet instances can access internet but no incoming request will come to them => in this case you will be asked to give static IP for your NAT gateway 
+Choose VPC with public private subnet + VPN => You can create this and it will ask for IP of your VPN and this VPC will be attached to the VPN IP you give and thus you access anything inside this VPC from VPN only since this VP is attached to VPN and thus when you computer send any request, your IP address changes to VPN IP address and that this VPC will recognize and allow access to VPC webapps.
+Choose private subnet VPC with VPN => You can connect to private subnet directly. In case of public subnet, you could access its app even from outside the VPN but here only VPN will be allowed.
+
+Creating Custom VPN without the wizard => VPC => your VPCs => create => see customvpc.md in folder => copy name and CIDR for VPC, if we put tenany as dedicated => we will get seprate hardware for our VPC and more money => Select created VPC and actions => enable DNS hostnames => this will create DNS name like amazon..... for any public IP used by instances inside this VPC. If private subnet ony, dont bother as no public IP will be there.
+
+Create subnets mentioned in custom-vpc.md file => Subnets from left => create => select VPC we created => copy name, CIDR, AZ from file => Add new subnet => do same for this one as per file for all 4 subnets => Now create => On subnets list, select public one, action => modify autoassign public IP and do check this autoassign => for these DNS name will be created automatially as we selected while creating VPC.
+
+Create route tables for private subnets => Copy name from file and select VPC and create => Go to subnet assocaition tab of this route table => edit => select private ones => these will be linked inside the route table and VPC router will use this to know.
+
+Inside route tables list, you will see another route table without name => rename it as Main route table => you will see public subnets in its associations. 
+
+Create internet gateway => internet gateway =>create => name, from file and create => select this and on actions attach and attach the VPC we created. 
+
+Edit main route table => Routes tab => add from anywhere 0.0.0.0 and select destination as internet gateway. You will see entry that anything from VPC CIDR should go to local. 
+
+Create NAT gateway => we know these are created inside the public subnets => Go to NAT gateway => give name, select 1a public subnet and allocate elastic IP => create 
+
+Now add this NAT gateway to the private route table so that anything from them goes to NAT gateway which will use its public IP to send that request to outside internet => In private route table, add route 0.0.0.0 to NAT gateway we created. 
+
+Create security group => add our VPC => in both inbound and outbound rules, add all traffic => source and destination as anywhere for now.
+
+Now we are ready to run instances in our subnets and test the config => See the file in folder called "aws-cli-run-instances" => we can run the instances from UI as well but let run it in using cli => See the file on how to run instances => we ran in 2 public subnets and 1 private subnet. 
+
+Click public 1a instance and copy public IP and hit it and you should see subnet 1a.
+
+Now we can go to public 1a and click connect button on top => use EC2 connect => inside this instancem lets ping private IP of public1b instance and we get packets, now ping private IP of private1a instance => this will also connect => routing is also working fine. 
+
+Now fact that private instance was able to run that user data script, and isntance not failed executing that script means it was able to download things from internet and can connect to internet as well. 
+
+------------------------------------------------------------------------------------------------------------------------------------------------
+Security Groups and Network ACLs (NACL)
+
+Both of these are firewalls which filters the incoming and outgoing traffic based on IP, etc. NACL are applied at the subnet level and thus filters any traffic at subnet level and Security group is at instance level and thus any EC2 instance is secured by security group. We can apply them to any instance inside any subnet. One security group can be applied to multiple instances. 
+
+Differences between security group and NACL => 
+
+1. Security groups are stateful firewall while NACL are stateless firewall => When client IP browser send request to IP of server, browser gives a temp port to request as sourcePort => Request has source port, source ip, destination server ip, destination port => Now in security group of server, we have to give inbound rule that request coming from any IP on internet of type http on port of server 8080 is allowed => Now server will respond back to browser which has random sourcePort and client IP where browser is running => for this response to go out, in case of securuty group we dont need to add outbound rule because stateful nature stores this info and acts intelligently but in NACL, it is stateless and outbound rule needs to be given. In case of security groups, outbound rules are then used when our server itself initiates some request. 
+
+2. Security group has deny rule at the end which auto applies => we have to add the allow rules only and everythng else denied. In case NACL, we can give both allow and deny rules (this like security group we should add ourself a DENY for all traffic at end) and rules are processed from top to bottom and whenever any rule matches, the process finish there and any following rule wont be applied.
+
+In security group, we can mention the source as IP address, another security group, CIDR block ranges of IP, etc. See slide 233 => it shows the webapp exposed through public ALB and we have put ALB in security group and inbound is all traffic from public web and outbound is security group of our web frontend server => this server has inbond for ALB security group and outbound for internal ALB which in turen has outbound for API server.
+
+Lab: Inside EC2 => security groups => Create security group private-app => choose VPC we created => remove outbound rule, add inbound rule as http and source public-web security group we created earlier. Attach this group to EC2 "private" instance now => action > security => remove the previous group and add this one.
+
+Now lets change the public-web security group as well => click it => edit inbound rules => change all traffic to http => choose my IP as source since we will open webapp from our Ip address (and we are using vpn) => Now coppy public IP of instance 1a and hit it => it will show 1a subnet in webapp => Now chanhe the location in vpn and your IP will change and if you hit now, it wont work because inbound rule for public 1a instance security group is old IP. We will edit the rule and make it anywhere since it is webapp and should be accesible to everyone. 
+
+Now we have added in private instance a securtiy group which allows traffic from public-web securoty group only => go to public instance and connect => it wont connect because in public-web group, ssh inbound rule is needed => add inbound rule SSH and from anywhere source => Now connect to public instance and hit curl for private IP of private instance and it should connect and though we dont have outbound rule for private, because it is security group, it will work. 
+
+Inside VPC, go to Network ACLs => You will see a ACL already there for our multiple subnets allowed => we can go into it => inbound rules => Add rule 101, http, source as my IP address paste, deny => now webapp wont open => it will work => you have to give rule number as 99 since they are applied in order => now webapp wont work => change location of VPN and IP and it will work => It might take network ACL to take couple of mins to apply this rule or pick changes as they are not that fast as security group.
+
+Now we can clean up resources like NAT gateway and allocated elastic IP for that. Also terminate the instance using the aws-cli as mentioned in the aws-cli-run... file. 
+------------------------------------------------------------------------------------------------------------------------------------------------VPC Peering 
+-----------
+If there are 2 VPCs in same or diff region, same or diff AWS account, they can be connected to route the requests to each other directly using the private IPs (we might be using public subnets also but they also will have private IPs) and this we might be doing to invoke any resource in other VPC like lambda, EC2 etc => this is done by AWS LAN internally.
+
+IMP thing for this is that 2 VPCs that are peering must not have a overlap in CIDR blocks of them. Also, VPC peering is not transitive i.e. A connected to B and B connected to C => A is still not connected to C i.e. transtivity wont work, we have to connect A and C as well i.e. full mesh connections are needed. 
+
+Now let say we have 1 VPC in region 1 and another VPC in region 2 and we have EC2 instance inside their subnet => Now for these 2 EC2 to coomunicate we will peer and it will need 2 things =>
+
+1. For security group of EC1, we have to add inbound rule of ICMP protocol (peering uses ICMP) on all ports and source of inbound as CIDR block of VPC 2. Similarly for EC2, in its security group, we will add CIDR of VPC 1.
+
+2. In route table of VPC1, we have to add a route which says that if destination is CIDR block of VPC2, route it to peering id which we will get on peering. Similarly in route table of VPC2, for destinations of VPC1 CIDR block, send them to peering id again. 
+
+Lab: We will use VPC in 2 diff accounts of same organization => we have management account and production account in organization we created =>  we will now create a VPC inside the Production DCT account as per file custom-vpc-prod.md file => Once created the VPC, open it => details and copy the ownerId which is accountId actually and the VPC id 
+
+Now come back to management account where we already have one VPC created. Now go to VPC => peering connections => create => select VPC of managament account that wew created custom => Choose another account and paste accountId of DCT prod we copied and the VPC id => Go to DCT back and in peering connection, we should see request to peer => accept it
+
+Inside prod DCT, create security group and select VPC-prod we created using file, Add inbound rule ICMP IPv4, for 10.0.0.0/16 which is CIDR of VPC of management account => Add ssh rule and same CIDR block as source i.e. 10.0.0.0/16
+Launch an EC2 instance inside DCT, select VPC we ccreatred, public subnet, select security group we created above, launch
+
+For management account also create security group with CIDR source ICMP as 10.1.0.0/16 and ssh rule for same source CIDR. 
+Select public1a instance and actions, security, attach security group created above to it. Also keep the public-web security group for this instance as well since we want to expose it still to outside which rule is not present in above security group. 
+
+In management account, go to route tables and edit main route => add 10.1.0.0/16 as destination and it should go to peering id which you can paste. In DCT as well add route for 10.0.0.0/16 with peering id.
+
+Testing => go to public instance and connect and private IP of instance of other VPC. Also do 'ssh IP' and it should work since we exposed ssh as well. 
+
+Terminate the instances we created. 
+------------------------------------------------------------------------------------------------------------------------------------------------
+VPC Endpoints 
+--------------
+Now AWS has private services which are created inside VPC like instance, load balancer etc and there are public services like s3 which are public urls (Can you have s3 inside VPC => No ? because it is public thing where all buckets are present, its just that we can put restrictions on its use using policies).
+
+Now let say we have a VPC and private subnet inside it and instance inside this private subnet want to connect to s3 => One way is to connect by putting this under public subnet to have public IP address so it can communicate to internet and connect to S3 over internet or second way is to use NAT gateway through public subnet to connect to internet and connect to s3.
+
+But there is better way since private IP instance wants to connect service which is inside AWS network only => so why go through internet in between => AWS provides VPC endpoints service which are of 2 types => Now this endpoint we connect to our private IP instance somehow and this VPC endpoint is AWS service which internally makes sure to connect this private IP to requested AWS service internally without going through internet.
+
+Now since there is no internet involved and AWS is doing this internally, it is more secure + the infra is simplified without the need of public IP or NAT gatewat etc
+
+1. VPC interface endpoint => as name suggest this endpoint service actually uses a network interface of type ENI (elastic net interface) =>  this endpoint is created at subnet level and thus, instance inside subnet connects to this interface inside subnet. Instance has private IP and this interface will take one private IP of subnet. Now this endpoint interface internally by AWS using AWS privatelink service to connect one of the AWS services that are available and thus you can communicate directly. Here we have to give the DNS names of the public AWS service where we want to send the requests from interface. We have to also setup security group for the interface telling what all traffic it can accept from the instance. The various services it supports are: API gateway, cloudformation, AWS partner services, cloudwatch, etc. Since this use privateLink, there is extra charge for using this.
+
+2. VPC Gateway endpoint => This is created at the VPC level and one gateway connect to one service => if we have a gateway for s3, all s3 related things can happen through this gateway from any subnet. For dyanmo, we have to create another gateway. Now for this to work, we create a route entry in route table of the vpc (which is used by the VPC router) => the route will have destination as s3 urls and target will be gateway endpoint. Thus, when instance inside private subnet sends packet destined to s3 url, it goes to VPC router and based on destination, it sends traffic to gateway endpoint and internally gateway endpoint works within AWS to send request to S3 service at mentioned s3 url. Now we can have IAM policies applied to gateway enpoint (called vpc endpoint policies) like it can only read from s3 and thus if any instance ask it to write to S3, it wont be allowed. Also we can apply resource based policy on the S3 buckets that principle gateway is only allowed to read from this bucket. It supports service s3 and dynamoDb.
+
+Note that when gateway sends the request to s3, it just forwards/routes the request as is to s3 service => Inside s3 service, it will get request from instance and only if instance has permission it will be allowed to do that operation.
+
+See slide 245 where it shows the use of endpoints to expose the service running behind NLB inside private gateway => VPC endpoint once exposed, now in public, anyone can access that endpoint directly. (Note endpoint is inside private subnet only).
+
+Lab: Inside VPC, select endpoints => create, choose services, search s3 and select s3 gateway endpoint => Choose our VPC => choose main route table => create => go to Route tables => open main route table => You will see new route automatically added where destination s3 service is sent to this endpoint id. 
+
+Now we will send s3 request from our EC2 instance in public subnet that we have running and it should be routed to endpoint and endpoint is forwarding request to s3 service but EC2 instance won't have permission for s3 => let's go to IAM, select EC2, create role => attach fulle s3Acces policy and create => Now select this public instance and actions security => modify roles and select the role created => 
+
+Go to s3 and create a bucket inside it and put some files inside it.
+
+Now connect to EC2 instance and try 'aws s3 ls s3://bucketname'
+
+Go to endpoint, select, policy tab => copy the current one and click edit => custom => paste the current policy and change it to effect will be "Deny" => Now try the command on EC2 again and we should see access denied. 
+
+We can add bucket policy as well => click bucket, permissions => edit policy and paste the Bucket-pol....file => paste your bucket name in file and vpc endpoint id => this policy is saying that looking inside this bucket is only allowed if the request is coming from gateway endpoint. 
+Thus try s3 command from instance now and it should pass and see content inside bucket. 
+But try it from your machine where we did aws configure => it will fail since request to list bucket content is not coming from endpoint.
+
+To regain conrol of bucket, login as root user and delete the bucket policy because now if you login normally, since UI wont be through endpoint, bucket will not be allowed to open for you through UI.
+
+AWS Client VPN
+--------------
+this is used when we want to allows access to our VPC only to vpn connected clients and those client we configure in AWS.
+This is a way connect out computer to the AWS VPC through a private IP i.e. Any VPN we use masks our public IP and uses its own IP and thus our IP is private or not visible to AWS VPC where this VPN is doing the connection. Also since this is VPN, this end to end connection with VPC inside AWS data center is also encrypted. 
+See slide => 249 => 
+
+We create a VPC endpoint inside AWS which can be connected to multiple subnets inside 1 VPC and subnets of diff AZ only. Now any VPN based client connects to this endpoint and we are able to access resources inside subnet through it. Actually, when we set up endpoint, AWS gives us client configuration file of the VPN client (whatever we are using on client side like openVPN) => which has 1)private IP address client will send for every request through VPN i.e. client IP i.e. actually it is client CIDR in config file and it picks one of them as client IP 2) endpoint DNS name 3) Sets up route table on local client which will send any traffic destined for CIDR of VPC to this endpoint DNS.
+
+client VPN is configured with this endpoint file => Now client send request to specifc IP2 (private IP of EC2 inside VPC) of AWS and thus it goes through VPN and it uses route table => VPN send it to endpoint DNS name and uses VPN public IP to connect to public DNS name of endpoint using SSL TSL secure connection over internet. Thus till this point, public IP of client is not known to endpoint. Now endpoint gets the request and along with it get private IP of client => Now based on which CIDR this private IP belong to, endpoint comes to know the VPC it will go to i.e. destination VPC CIDR block called source network adress translation (SNAT) => Now once VPC is decided, the VPC endpoint is connected to subnets by placing a network interface inside every subnet and thus directs the traffic to correct destination IP.
+
+AWS Site to site VPN
+---------------------
+See slide 251 => this is used when we want add one office/customer office like chennai to AWS so it they can access VPC. 
+
+Thus you can see in slide that customer office has customer gateway where all requests comes and there is route table on this gateway which says that any traffic with destination as our VPC CIDR block should be routed to virtual private gateway and this VPG is connected to customer gateway for routing to happen using the static of BGP peering => and one gateway gets it for destination, it sends it.  In slides, it is shown vice versa which can also happen. Also this AWS site to site VPN is managed IPSec VPN. 
+
+VPN cloudhub => See slide 253 => cloudhub is something we wont find in AWS as it is architecture pattern in which we use site to site VPN => In cloudhub, we connect multiple customer account to the VPG gateway installed on AWS site through customer gateway having diff BGP ASN i.e. border gateway protocol. Thus customer account and VPC can talk to each other but also customer offices can talk to each other using VPG on AWS site and this model is hub and spoke model and all connections are IPSec VPN connections.
+
+AWS Direct Connect DX
+---------------------
+Case 1: Now even if we have VPN, it runs on the internet though it is internally private => when it access any service in AWS it has to go over internet which might add latency, congestione etc issues and better ISP might make it better but still issues are there like congestion => One solution is to use DX which gives a private connection line dedicated to you to connect to your services in AWS and thus since its only for you, no congestion will be there => This is done using the Direct connect locations which AWS has created in many number across the world and thus we will connect our network to this which in turn is connected to AWS. See slide 255 => Now every DX location has AWS cage having AWS equipments and customer/partner cage having dedicated equipments for customer. In AWS cage, they have a direct connect ednpoint which is a router and in customer cage we have customer/partner router => These AWS DX router has DX port dedicated for customer partner router and through it, customer router are cross connected for 2 way communicaton with AWS DX router => Now in the client side, the router is installed and this router is connected to customer router in AWS DX location which can be done by contacting your ISP provider. Now on other side, the AWS DX router is physically connected by high speed (1 to 100 gbps speed) physical fiber connection (100 gbps is also released for some locations) to AWS => see slide 257 => and inside AWS, we create a private VIF (virtual interface) to which the AWS DX router sends data => private VIF is created for one VPC inside its region => this private VIF sends the data to virtual private gateway (VGW) of the VPC which will send data to correct instance/IP.
+Note: VIF is a virtual interface 802.1Q VLAN and uses BGP session. 
+
+Case 2: Now in above configuration, let say we want to connect to some public AWS service like S3, how do we do so => instead of private VIF, we will use the public VIF in that case and thus the data coming from DX router to public VIF will be connected to the public AWS service like S3 directly instead of VGW like private VIF. Do note that this connected of public VIF and AWS service is happening inside AWS network and not inside internet and thus public VIF cant be used to access internet. 
+
+Case 3: We told earlier that private VIF can connect to only one VPC => if you have multiple VPCs inside region => to connect to each of them, we will still use single DX connection but there will be multiple private VIFs and each VIF connecting to one VPC through VGW of that VPC. We can also use a hosted VIF here which is also a private VIF but it can be shared with another AWS account wanting to access the same VPC.
+
+NOTE :::: IMP for exam => DX connect is not a securre connection and is not encrypted => if we want a encrypted one, we can have a VPN IPSec S2S connection on top of this VIF to have a secure connection. 
+
+Case 4: See slide 261 => Now we know that AWS DX location is physical location and it will be inside some one region, say pune but now avalara pune wants to connect to some resource from other region in chennai => they cant use the DX location pune for this and must use DX location of chennai to connect to chennai region of AWS => avalra has to open physical data center of their own in chennai near to DX chennai and thus connect like this => this will be very costly => this is show in slide 261 => solution to this is using Direct connect gateway => see slide 262 for this now => We can have only one data center in pune and it will connect to DX location near it and thus private VIF instead of connecting to the VPC of its region will connect to DX gateway inside AWS and AWS has connected this DX gateway to multiple regions VGWs and thus we can access resources from diff regions using DX connection from one office data center only. Note that you cant use direct connect gateway to share data across regions i.e. it has to be coming from corportate office data center through DX.
+
+Case 5: Now we discussed that though direct connect gateway connects to multiple VPCs of diff region, it cant be used to have communication between those VPCs even if they have done VPC peering. Now let say we have architecture as show in slide 265 => just see that for VPC peering to connect multiple VPCs, since they are not transit, we have to have 6 VPC peering connections => now come back from this slide to slide 267 => now if we want our corporate data center to connect to these difff VPCs, but in transitive manner, + having a DX connection => we can attach our DX gateway to the transitive gateway (TGW) which will then connect to all VPCs of diff region directly and allow transitivity without 6 connections to connect all. Note that if we are using TGW, we have to use transitive private VIF. Thus we have do routing within VPCs + we can have DCX connection from the corporate office and use IPsec VPN along to have it all secure. 
+
+Benefits of DX connection in any case :  private connectivity + consistent network (increased speed + bandwidth) + if large data transfer, costs lesser
+
+Using IPV6 in VPC 
+------------------
+IPv4 is 32 bits but number of addresses are not sufficient for 8 billion population and this is only 4 billion => we have a workaround of using private IPs but its not gonna work in long run and thus IPV6 is 128 bits and it also has network and host part. Also it uses hexadecimal instead of binary which makes it further a very long range. Inside VPC, like we have v4 CIDR, we can have a v6 CIDR block for our VPC like shown in slide 271 => IPv6 addresses are publically routable and dont need NAT becuase of their long range => See route table that we have to add that ::/0 meaning all v6 traffic must go to internet gateway => We can use egress only internet gateway for outbound traffic of v6 and inbound we can directly route data publically as not NAT is needed. 
+
+VPC Flow Logs
+-------------
+VPC flow logs are used to capture data of traffic going in and out of the diff interfaces in VPC => this log data can be stored n cloudatch or s3 and can be collected at VPC level, subnet level or interface level (ENI attached to Ec2 instance)
+
+Lab: Create a Ec2 instance in 1a subnet => cloudwatch => log group => create => give name, retention days as 5 
+Create a role for service to collect logs => go to IAM => roles => create => IAM => go past the polciies since we will create inline policy => give role name and create => click the role now and add inline policy => vpc-flow-logs file paste and save => for this role => go to trust relationships tab => currently its ec2 since while creating role we chose ec2 but if you see policy, this role is giving permission for writing logs etc => and it is needed not by ec2 but the log service => replace ec2 in principle/service by 'vpc-flow-logs.amazonaws.com' => 
+
+Now go to EC2 and network interfaces and select flow logs tab => create flow log, give name, all, 1 min , cloudwatch, select log group we created, => create => not hit the ec2 public IP, remove the http from security group to create erro log and open cloudwathc log group to see erorr in log stream => terminate ec2 instance
+
+
+

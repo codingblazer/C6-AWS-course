@@ -1,0 +1,122 @@
+Simple Storage Service (S3)
+----------------------------
+Key value object storage, we create a bucket/container which store these key value pairs, key being object key to refer it and value is actual object. The object has props like: key, value (actual data), versionId, metadata, ACLs and subresources. We can store millions of object in bucket i.e. no limit and unlimited storage + file can be any file format/folder + reach file size can from 0 bytes to 5TB max. An account can have max of 100 buckets limit.
+
+S3 is a public AWS service and can be accessed using the REST API and over the HTTPS to be secure and the url for the bucket you create can be in 2 formats: https://bucket.s3.aws-region.amazonaws.com/key OR https://s3.aws-region.amazonaws.com/bucket/key => As you can see from the url, bucket is tied to AWS region and thus they are created inside one AWS region. Also we can see from URL that bucketname is present and thus, since this is URL, bucketname has to be unique globally across everyone using AWS in the world (you might think that bucketname should be unique per region since region is also present in URL, but nope). We should always create the buckets in the region which is near to our customers to decrease latency + IMP - S3 offers read after write consistency which is introduced in 2020 only as earlier it was eventually consistent. 
+
+https://mybucket.s3.us-west-1.amazonaws.com/Project+Alpha/Sales+Proposal.docx => we can use folder like this Project alpha for grouping things but to S3 it is just another key value object. We can create folders inside folders but buckets can't be created inside buckets. 
+
+Connecting to S3 => We can connect to S3 over the internet and EC2 instance inside VPC can connect to S3 using internet gateway through public internet or they can connect privately using S3 gateway endpoint we read about earlier. 
+
+Storage Classes 
+----------------
+See slide 287 => S3 standard is default one when you create and if want to use any other class, configure it => intelligent tiering observes your patterns and stores data across classes based on those, standard IA is for data used less frequently, standard one zone IA is same as standard IA except data is stored in one AZ only, s3 glacier for rarely used data and deep glacier same just cost is least.
+
+Durability => same for all => means data loss 
+Availability => diff for all => Note that 9.99 and 9.9 are diff values => means data access 
+
+Min capacity charges => For first 2, you will pay for actual data in bucket, for rest the min capacity is mentioned meaning that if your bucket is empty in year, you will still pay for 128kb for year.
+
+Min storage duration charge => Even if you store for 1 day and removed data, you will still pay for whole period = min duration. 
+
+Retreival fee => charges for reading data => if you need to read data more often, dont put them in classes which are for not frequently access data as they will charge retreival fee because you are doing something they are not meant for.
+
+Latency => in how much time you will get response for your s3 get API call => it's more in archive type classes like even 24 hrs for some cases
+
+S3 Select and Glacier Select : Now many times we have big zip files inside s3 bucket and we want to extract that zip, find the file we want from zip and send it => This is usually done by lambda function and it will take lot of time to do this. But we can also use Select function in which we can give a SQL based query to apply on the zip file inside the s3 bucket or the s3 glaceir bucket and it will get the files from the zip file to us.  
+
+Bucket Permissions
+-------------------
+We can control the bucket permissions using 1) IAM policies which are applied to principle on specific resource like bucket (these policies don't take principle field) 2) Using bucket policies or resource based policy => These are applied to the bucket itseld inside s3 and tells who can access what in this bucket (these policies will have principle field) 3) Access control lists => this used to exist before IAM and resource based and is not recommended => Unlike bucket, these permissions can be also applied at the object level or bucket level like bucket policy.
+
+IAM policy generally used for other services than s3 but if all your s3 buckets need diff permissions, it is better to use at IAM level rather than adding multiple diff IAM in diff buckets. Bucket permissions are generally used one for S3 and they also allow communication with AWS accounts in organization.
+
+Lab: 1) ACLs => Click the bucket > permissions tab => edit block public access and make it public since it is deny by default for everyone. Now go below and you will see access control list => edit => can change the permission for bucket but not as powerful as IAM or resource based policy since limited options here => we can also click any object inside bucket -> permissions -> ACL -> edit => this will allow permissions at object level 
+For these you will also see "Access for other AWS accounts" where you can paste account ID and ACL permission it has for bucket or object.
+
+2) IAM and bucket policy => create another user and login to that in separate inginito and managament account in main. Now IAM => paul user click  => permissions => add inline policy => see diff policies we have in user-policies-and...file => Just paste the ARN of your bucket => now paste these inline policies one by one and try creating diff folders like department, confidential with files inside them and now test by pasting inline policies from 1 to 4 one by one.
+For 5th, use the 2nd inline policy for paul (which allows only listing of files inside the bucket but not inside objects like folder) => Now we will apply bucket policy 5 => copy ARN of paul user and paste => bucket is saying that resouce (give bucket arn) has allowed paul user principle to do all actions on bucket with condition as inside confidential folder. => you can paste this inside bucket -> permissions, go down to bucket policy and edit and apply.
+
+Versioning, Replication and Lifecycle rules
+-------------------------------------------
+Versioning is done for bucket and then objects can have versions and we can get any version of object => this helps in protecting us against the accidental deletion or overwrite. 
+
+Replication is maintaining copy of bucket => 1) CRR (Cross region replication) => in this another bucket is created in diff region as source bucket and changes in source are automatically done in copy bucket. 2) SRR (Same region replication) => in this another bucket is created in same region and these buckets can also be in diff AWS accounts but in same region. 
+Both types of replication are only possible with versioning enabled and can't be done without it. 
+
+S3 Lifecyle management => helps in figuring out objects lifecycle actions i.e. 1) transition => object might be transited to diff storage class and there are rules specified in slides 302 and 303. 
+2) Expiration => tells when to delete the object automatically without us deleting them. 
+
+Lab: 
+VERSIONING: Click bucket => properties -> versioning => edit => enable => now go to objects and upload word file inside bucket. Now edit this world file and upload again => you will see only one file => turn on the switch "Show versions" => it will show hierarchy for your word file having diff versions. We can also try deleting object inside bucket and in show versions thing, we should still see the object but it will be having status as "Delete marker" which is latest version i.e. deleted for that file => if we delete this marker itself, it will be like undo of delete.
+V IMP - versioning can be setup on bucket by 1) Any authorised IAM user 2) Bucket creator 3) Bucket owner (i.e. root account IAM user) 
+
+REPLICATION: Create another bucket and choose diff region for this + also turn on the versioning for this since we need versioning for both buckets for replication.  => Go to original bucket and management tab => create replication rule => check "this rule applies to all objects" => choose bucket in this account => choose the other bucket => IAM role -> create new role for us so that this bucket has role to access other bucket for writing copies => Save => You wont see anything in destination bucket still because relication rule dont copy the existing content of source but anything that is added in source after replication rule is enabled => Try this now and we should see the copy in couple of mins.,
+LIFECYCLE RULES: bucket -> management => create lufecyle rule => apply to all objects => transition current objects between storage classes => standard IA for 30 days, glacier after 90 days => save + create another rule "permanently delete previous versions of the objects" after 30 days and save => lets delete these rules for now since we dont need them by select rule -> actions => delete.
+
+MFA multi factor authentication with S3
+---------------------------------------
+1. MFA delete => This is used to restrict the allowed bucket users for 2 actions 1) Changing version state of bucket i.e. they can't delete any version or remove versioning reason being that if anything is deleted, version of it will always be there and hence eff. thing is never deleted 2) Permanently deleting objects => User cant delete the objects inside bucket permanently
+
+Thus if any of the 2 operations are to be performed, it will need MFA and this MFA can be setup only by the bucket root owner and thus only he can pass this step using MFA he setup and perform operations. Other users cant pass through MFA and cant perform this operation. The MFA authentication is done by passing access key, secret + header "x-amz-mfa" in the request which has MFA auth code. The MFA delete can be enabled by root only when versioning is enabled first on the bucket.
+
+2.MFA protected API access => not just for s3 => accessing resources through API or CLI => We add a condition in bucket policy to implement this using the key =>  "aws:MultiFactorAuthAge" is true then MFA should be used. 
+
+S3 Encryption (IMP FOR EXAM)
+----------------------------
+Encryption in transit is done using HTTPS SSL and TSL connection and thus we are talking about encryption in rest i.e storing data as ecrypted:
+
+1. SSE-S3: Server side encryption with s3 managed keys => When someone writes data, it is encrypted and then stored in S3 using AES 256 encryption and key used for encryption is managed by AWS only and rotated as well and key is diff for all objects. When user fetches the same object, it is decrypted using the same encryption key before sending to the requester. To request server side encryption, user has to send header in request called 'x-amz-server-side-encryption' having value as encryption algo like AE256. If we want all data in bucket to be encrypted, we can apply bucket policy denying any upload of data if this header is not sent, thus any data incoming will have to have this header and will get encrypted.
+
+2. SSE-KMS => Server side encryption using the KMS managed keys => So, AWS has KMS key manageent service where we can create custom master keys that will be used for encryption and thus encryption is done on S3 server side in conjunction with KMS. In this, the header sent is same just the value of header is 'aws:kms'
+
+3. SSE-C => Server side encryption using the client provided keys => the encryption key is not stored on AWS and provided by the client but the actual encryption happens on the AWS using keys provided by you. This gives more control to users for the keys, having own rotations etc.
+
+4. Client side encryption => In this, encryption and decryption happens on the client side and then data is sent or read. The client again manages the keys himself and rotation etc handles himself. 
+
+Note that encryption happens on new objects only and the data already present wont get encrypted automatically. 
+
+LAB: Create bucket and upload object like image and in upload config, it will ask for serrver side encryption => choose SSE-S3 and upload. We could have choosen SSE-KMS also but will do later. This encryption is at object level. We can go for bucket based encryption => bucket => properties => default encryption edit => enable => SSE KMS => aws managed => save => now upload any object and in details of object you should see it is encrypted using SSE-KMS and thus encryption now will happen on its own. 
+We can now remove this encryption. Now go to bucket, bucket policuy edit and paste file enforce-encryption.json file by pasting bucket name in there => this policy is saying that this bucket should must have server side encryption header being sent for upload. In above case of SSE KMS, UI was sending that header automatically. So when using API, CLI, we would have to send that header must => Also this policy just ask for server side encryption header to be present i.e. value can be any type of encryption of 3 we discusssed i.e. it just enforced encryption.
+
+S3 Event Notifications 
+----------------------
+We can send notification to email, lamba code, SQS queue whenever object is uploaded in s3 bucket => Go to AWS SNS simple notif service => create topic => standard -=> access policy => copy the arn of this SNS topic => go to file in course S3eventnotif.json and paste in resource => Also paste the account ID in condition and the bucket name in condition => So we are applying a resource based policy on this SNS topic resource that if the notification come from this account and this bucket, it is allowed in => Save => Create subscription in this topic => enter your email => confirm email and subscruption is registered => Under s3 bucket => properties => create event notif => all object => SNS topic and select our topic => Save => upload new object in bucket => we will get email with object details. 
+
+S3 Presigned URL
+----------------
+To limit the access to object for limited time using signed link which you can share => We can presign the url to our s3 object resource using CLI like:
+'aws s3 presign s3://<object path>' --expires-in 60 => this link will expire in 60 seconds and resource is available to anyone public as well who is not authenticated. 
+
+S3 multipart upload and transfer acceleration
+----------------------------------------------
+Multipart is splitting your files greater than 100 mb and uploading these parts in parallel for greater efficiency using s3 multipart upload API. Can be used for 5mb to 5tb but >100 mb is recommended. Must for objects > 5GB. We can code it in a resilent way such that our application is able to send any failed parts again for upload.
+
+Transfer Accleration is also used to speed up the object transfer between client and s3 bucket. This uses the cloudfront edge locations to achieve this. So any upload you make let say in India to bucket in US, it will be stored in cloudfront edge location which will be in india nearby to you and this edge is connected to AWS global network. Now, this cache of edge location can be used by users in India to get the object with small latency. This is enabled at the bucket level and done when bucket might be far from the location of end user. Also AWS only charges for this if you get advatage out of it i.e. this have resulted in decrease of standard latency. (Since cache might not have it and it might even take same time as normal get from US bucket)
+
+S3 Logs 
+--------
+Now we can capture the logs of the s3 bucket like what all request came at what time and what was the status code or error that happened => Since these logs have to be stored, they cant be stored on same bucket to avoid circular loop and thus you have to give another bucket. Also that bucket should not have its logs destionation as first bucket or we will again hava loop. Inside destination bucket, we must grant permissions to Log delivery service to be able to write logs to destination bucket. (by going to permissions tab) 
+
+Static Website 
+--------------
+Now static website is something which does not do any application processing on client side => there can be javascript code but that wont execute in s3 but when page is rendered, only then. In dynamic website, client side does processing like of data of history of user and based on that might show different content for different users.
+
+If we have a domain name, bucket name must match the domain name you have otherwise its fine =>  Upload the html and error.html file amnd under properties => static web hosting => edit => enabled => give html files name for error and index => copy the url => Now go to properties and make bucket public and also go to each object, action and make them public separately. Hit the url and you should see website.
+
+CORS issue => Now CORS stand for cross origin resource sharing. Now origin in this stands for (protocol + port + DNS name) => Now let say we have one bucket abc.com from where we are hosting abc.com website => When request come from abc.com domain on the bucket at http port 80, it is fine since origin is fine. But let say this JS code is also sending request to another bucket pqr to get the assets => Now on pqr side, the origin is (abc.com + http 80) which is not same as pqr and it will gives CORS error and thus to make it pass, on pqr bucket we have to add CORS config to allow this cross origin to send request => See slide 331 => we can add these rules in s3 bucket so bucket allows abc.com origin requests.
+
+Cross Account Access 
+--------------------
+If we want to access the bucket from other AWS account, we have following methods:
+
+1. Using resource based policies => We can tell in bucket policy that principle (use ARN of user from other AWS account) is allowed to access this bucket for which actions and for ARN user in main account. But in this case, when ARN user logs into his AWS UI account, he can't open that bucket anyway => only programttic access is possible.
+2. ACL based resource policies => we can tell in ACL (read ACL section above) that which accountId can access this s3 object or bucket and thus again this is also programmatic access.
+3. Using IAM roles for BOTH PROGamaatic and UI based access to bucket. => To implement this, see slide 334 => We will create a IAM policy in account1 for user having permission to STS for assuming role. Now we will create a role inside account B and this role has permission policy telling what all things it can do in S3 and it has trust/resource based policy telling who can assume this role which will have the principal as user in account 1 => Thus when account 1 user login to his account, he can go to switch roles and he should see this role from account B which he can switch to and view the bucket of account 2 from his UI. 
+
+See => cross-account.json file => it has different policies you have to use as decribed above. 
+Cram -> see s3 copy API in that 
+S3 supports 3500 request for put, post, delete per sec and 5500 get request per second, per prefix in bucket.
+
+https://digitalcloud.training/certification-training/aws-solutions-architect-associate/storage/amazon-s3/ => cheat sheet
+

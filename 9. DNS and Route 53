@@ -1,0 +1,137 @@
+Route 53 => DNS server mapping domain names to IP but very intelligent one => Client send request to example.com and for this Route53 has hosted zone which has set of records for this domain, each record giving information on how to route the traffic for this and thus they return IP of service to connect to and client hits that IP instead of domain name. It supports diff routing policies:
+
+1. Simple => simply gives IP for domain name
+2. Failover => If primary IP is down (which it knows by performing regular health checks), it gives secondary server IP for domain. See slide 357
+3. Geolocation => routes to closest deployment's IP of domain in terms of location => it is more about location of user and not about speed. => slide 358
+4. Geoproximity => closes IP within the region selected above
+5. Latency => path to lowest latency to get resource => IMP FOR EXAM => see slide 356 => We can have ALB as well and tell that at region level which IP to use. Unlike geolocation, where is user not matters i.e. in case goal is to get min time or latency
+6. Multiple value answer => can give mmultiple IPs acting like a load balancer => round robin fashion internally maybe => slide 359
+7. Weighted => weighted resources => we can say 20% traffic goes to one node and 80% to other one => See slide 355 => routing table like on left => Also the value of weight is between 0 to 255. If health check id that is given fails, no traffic goes in. Also this can be used to deploy diff versions of app like amaozon to diff users and do ab testing.
+
+
+Other functions of Route 53 => Domain registration portal, Hosted zone i.e. routing policies for domains among what described above, Health checks for domain IPs, Traffic allow => automation for routing adavanced
+
+Register Domain
+---------------
+Go to route 53 => domain registration => Choose unique domain name and contiunue => enter correct email etc => After few mins, we should see a hosted zone inside route 53 => 
+
+TTLs => tells how long browser will cache DNS entry until it hits DNS again for this domain to get IP. It should not be too long since it is possible that IP has changed and since TTL is long time, your browser is still using all IP to connect which is outdated. While too short will need DNS communication and adds latency.
+
+How route 53 works to resolve public IP => we hit example.com and in aws registrat we have a hosted zone for example.com which has routing policy based on which it returns IP of public subnet based resource like EC2 server and client hits that IP now.
+
+How route53 works to resolve private IP =>  Now, we can have a private hosted zone like carol.avalara.io whose server is in private subnet and thus inside some VPC. Now in route53, we can have a hosted zone carol.avalara.io which is not public registered domain but when it is hit, the route53 will have hosted zone and inside it we have to associate a VPC and thus when this happens, on VPC side a DNS server for private resolution is setup which will return private IPs for the requested resource. 
+
+Some imp points:
+We can move the hosted zone from route 53 to another registrat provider and vice versa. In case of private, we can associate hosted zone to VPC of other AWS account by getting auth from this other account and setting up association between these. 
+
+Lab: bring up 2 instances one in us east 1 and one in eu central 1 => Use the file user-data-az.sh in userdata which will run web server on these having webpacge displaying the AZ => Now lets use latency based routing for dct website of instructor in route 53 to public IPs of these instances => go to route 53 => hosted zones => click dct public hosted zone => create record => record type is A, paste Ip of first instance in value => policy as latency => region us-east-1 of instance => record id = us ec2 => create another record for eu instance like this => use some vpn and choose mexico and since it is closer to us, it will show us based AZ => choose belgium => eu should come up => delete the records and the ec2 istances now.
+
+Route53 Resolvers
+------------------
+Now usually in our compnay we have a internal DNS server that points private domain name to IP and then there are internet based domain names which are public which route 53 based DNS server does routing to IP once private DNS server has forwarded request to it becuase it cant resolve it => this forwarding etc is done using route53 resolver =>
+
+See slide 362 and 362 => We have corporate data center and it has a private DNS server and this data center is connected to VPC using private encrypted VPN connection => 
+
+Outbound => One of the EC2 machine wants to talk to other EC2 instance maybe or maybe its any domain => EC2 instance will send request to route 53 always since that is the only DNS server it knows (and it has records) and route53 has entry directed for that domain name requested by EC2 pointing to outbound endpoint => when outbound endpoint gets that request, its function is to pass it further to our private DNS server which knows what is the private IP for this private domain name and thus returns private IP to outbound endpoint which it can forward to private IP in its subnet. 
+
+Inbound => Now let say we as client are making request to public website and it will first go to our DNS server since our client knows only this DNS server and this is like private DNS and knows nothing about internet (like route53 dns doesnt know anything about private enteries) => our DNS server wont find that public domain and as last rule it will send it to inbound endpoint in AWS and inbound endpoint will then send it to route53 which will have public domain map and thus return  the result back to client through same path.
+
+Cloudfront
+-----------
+Amazon cloudfront is CDN, content delivery network => cdn helps in helping in fetching objects like files of any type to reduce latency and increase performance and we are talking about it over the whole world geographically => we might have content in us but users in india etc which is large physical distance making for bad performance and high latency which cloudfront resolves by bringing content closer to users.
+
+Origin => resource from one region, where your content is present => it could be s3 where your file is present for users, it could be EBS storage etc and thus s3 will be your orogin. Note this resource/origin can be within one region in world. 
+
+Edge locations => these are setup across all parts of the world by AWS and the content from your origin is pushed to all these edge locations and cached out. Now any user in india wont have to get the file from s3 in region in us but from the nearest edge location having the cache and thus this increase performance and reduce latency. Latency is determined by the actual physical distance and other factors like number of hops, switches, oversubscription on origin, congestion, etc. Now it is possible that the content you want is expired in the nearest edge location or not even present => in that case it will be fetched from the origin and latency will be more but not very very large because in this case also the content is fetched not over internet but over AWS global network which is very fast. There are 201 edge locations in the world. 
+
+Distribution => Distribution is created in cloudfront by giving name and have access endpoint for it, default being '<giberish like ofbeufwbfo4>.cloudfront.net' => We have to then associate one or more origins with this distribution where our content is present. 
+
+Cloudfront web distribution => this type of distribution works over web with http and https for distribution and supports both static and dynamic web content like .css, .html, etc. It can be used with web forms or for live streaming like AWS conference.
+
+Behaviors => in distrubution we can have behaviors to specify things like path pattern (i.e for his path pattern, go to this origin,  otherwise other origin), protocol policy (content can be accessed over https only and redirect will happen), cache policy (how long to cache things in edge location), origin request policy (security etc things for when you connect to edge location what is allowed and what not)
+
+Note: s3 static websites can also be CF origin.
+
+Regional edge location => these sits between origins and the edge locations. Now these are limited to 12 regional edge location and they are large cache and hold more content. 
+
+Working :  User connects to edge location and thus edge location is called point of presence.  Now edge location is connected to regional edge location and region edge location for specific region will be connected to origins inside this region and this connection is over AWS global network. When user sends GET request, it can cache HIT or MISS at edge location and if miss, it will go to regional edge where again it can be HIT or MISS and if miss here, again go to origin to fetch and cache it both at edge and regional edge. The default expiry i.e. TTL is 24 hours after which file is expired and we can customize that => If content is dynamic and keeps changing, it is better to have less TTL but performance will decrease in that case. If static content which not changes frequently, then have high TTL so that peformance is high. 
+
+CF serves the file from edge until expiration time has passed away but it is possible that if file is rarely asked for and there are other files being asked frequently, to create space for them, this file is evicted from cache edge before its expiration. After expiration, when request comes, edge location sends request for that file and if file has changed, origin sends new file with status 200 and if file is still same after expiration, it return 304 NOT MODIFIED without the file and cache just updates the expiry time. 
+
+Now caching can be done at various levels : Behavior/Path pattern based min/max/default TTL, Using headers to control cache duration at object level, Caching content based on cookies, Caching content based on request headers =>
+
+1. Path pattern based => we can tell that .jpg file should go to origin 1 and all others default to origin. Also we can specify the cache setting like min max default cache TTL in behavior => whichever path matches fist, the cache behavior for that path pattern is applied when object is fetched from origin to edge. These are applied using cache policies. This setting is applied when cache first time actually gets the object from origin. Usually default is used but min/max comes into use when using this setting with object header i.e. see next point.
+
+2. Using headers to control cache duration at object level and how they work with cache behaviors defined above (min max default) => Now these headers are not for GET calls (that is the 3rd point) i.e. even if we add these headers in GET request for object, they will be ignored. These headers are added to the file when it was uploaded i.e. PUT in S3 or other resources => 
+Cache-Control: max-age=seconds where value can be 0 to 100 years tells how long until object is expired and this is added in the PUT of object => when we GET this object, response will have this header and thus edge cache will read this from response and act accordingly. Also when this object goes from cache to browser from where request for this obj came => browser will also get these headers in response and will do caching in browser as well based on this headers. 
+Cache-Control max-age and Cache-Control s-maxage => these 2 headers can be set for object PUT and second one is specially for browser i.e. thus using both together we can give diff caching time for cloudfront edge caching and browser caching. Browser caching is nothing but time after which it will again request for object from edge and not use browser cache for that object. 
+Expires => not recommended but we can also give in diff format where we tell the actuall date time instead of duratoin when cache will expire. 
+
+Rules when working this setting with Behavior based settings defined in point 1. =>
+1. Cache-Control: max-age header present + behavior settings => edge cloudfront caching = Min(header based value, maxTTL value of behavior) AND browser caching = Cache-Control: max-age
+2. No header + behavior => edge caching = default value of behavior caching AND browser caching = depends on browser
+and so on => read them all here: https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/Expiration.html#ExpirationDownloadDist
+
+3. Caching content based on cookies => By default cookies are not sent from request to origin when first time edge tries to get object from origin but we can specify. Example - there are diff objects statesList for diff countries => which of these object to return can be based on country key in cookie => diff versions of object will be stored in cache based on country and also cookie will be forwarded to origin for getting first copies of object/on expiration.
+
+4. Caching based on request headers => Like above in cookies, if info like country is present in request header, that can be used to cache diff versions of the object in edge cache and thus request headers should be forwarded to origin => 
+
+forward all headers to origin => objects are not cached by default and uses our request headers only => all requests goes to origin directly everytime => no caching of its own
+forward a whitelist of headers that you specify  => these headers based objects are dependent on headers while others are cached in default way (which is done by sending internal default headers by edge to origin in request)
+forward only default headers => doesnt cache objects based on values in request headers and always only sends default headers i.e. no use of request headers here
+
+Cloudfront Signed URLs
+----------------------
+Signed URls are used to access a file securely and these are provided to clients to view file => we can specfy the expiration time of signed URL and IP range from which it can be accessed => it is generated by using s3.getSignedUrl and we can do this in some serverless app => we give signed url to client and when client access it, if he is allowed, he will access it from cloudfront distribution.
+
+Cloudfront Signed Cookies
+--------------------------
+Use signed cookies when you dont want to change url since signed urls are per file =>  this way using signed cookies which client will get, he can GET multiple files using the same url and which file to get can be specified in the cookie. 
+
+Cloudfront Origin Access Identity
+-----------------------------------
+Now see slide 376 => users tries to access file from cloudfront url like cloudfront/csnd.net => Cludfront actually gets Origin access identity using which it has to talk to s3 origin. Now if users directly try to hit s3 origin, we should not allow so that they are only served through cloudfront => we can have bucket policy in s3 which says that only OAI (oreigin access identity) type of resource is allowed to read and write to this bucket and hence since CF uses this to access it will be, but users cant access s3.
+
+Now in case of EC2 isntance having EBS or file disk from where cloudfront wants object, OAI wont work => in that case, we can get the IP adresses of the cloudfront edge nodes which AWS publishes and all those IP addresses we can add in security group of EC2 instance which are allowed to make inbound requests. But these IPs of cloudfront might get changed and thus needs to be updated in automated fashion whenever that happens.
+
+LAB
+---
+Go to s3 and create 2 buckets with any origin-1xyz and origin-2vnv name and choose us east 1 for region => upload diff image files in first and mp4 file in origin 2 => Go to cloudfront, create distrubution => choose origin as origin 1 => Restrict buckeet access yes, Create new identity for OAI => Yes update bucket policy for this => Cache policy you can see but we wont do => You can also see restriuct view access for signed url but wont do it now => You can AWS WAF (web application firewall) ACL list => it comes in exam => we can give ACL rules to prevent malicious attacks => we can also give CNAME if we dont wont to use cloudfront url and instead alternate domain name for this => Can specify default root object like index.html if cloudfront is serving static website => Create distribution 
+Once created, copy domain name, and do domain/filename and you should see the file => Create origin 2 as well. You can go to origin's s3 bucket and see bucket policy that it has automatically created to allow OAI
+
+Go to cloudfront behaviors tab => you should see default behavior present => create => path = *.mp4 => origin 2 select => create => you should see default beahvior to origin 1 and for mp4 to origin 2 => there is also georestriction tab where we can restrict the users to come from certain location only => now disable your distrubution => once disabled, delete it as well
+
+Cloudfront SSL/TSL
+-------------------
+We can issue a certificate for our cloudfront url using the ACM (or any third party certificate provider) and since we are issuing certificate for global service i.e. cloudfront, it must be issued in us-east-1 as per AWS rule since for global services, there is no specific region and thus us-east-1 is used. Now this will ensure that connection between users and cloudfront url is secured using SSL.
+
+Now connection bw CF and S3 can be also secured using SSL by using S3 own SSL certificate which cant be changed. If our origin is EC2 instance or ALB connecting to multiple EC2 instances => in that case we can have a SSL certificate using ACM (or third party provider) for ALB public url. Origin certificates must be public certificate, IMP to know it.
+
+Viewer Protocol => using SSL above bw viewer and CF is viewer protocol and then there are viewer control policies we saw while creating didstrubution asking if user needs to be redirected to HTTPS automatuically etc.
+
+Origin protocol => secure communication using ssl bw CF and origin.
+
+Cloudfront Server Name indication SNI => Now normally if you have 2 CF origins and their URLs => you have to give diff IP for these 2 origins i.e. your browser takes your request and gets IP for domain name and sends request to that IP which will be specific origin and it will return back SSL ceritficate etc etc. But if you have 10 origins, you will need 10 IP and IP in cloudfront costs a lost.
+
+In browsers after 2010, they support SNI => if browser support SNI, it hits DNS server to get IP of domain requested + it adds the actual domain host in the header of the request => cloudfront now gets the request whether for origin 1 or origin2 or origin 10, all to same IP but it doesnt know which origin request is for since it is using 1 IP for all 10 origin domains => this is when cloudfront uses the header of request to know the host of origin and sends request to that CF origin. Thus this saves a lot of cost
+
+Lambda@Edge => See slide 382 => self explanatory
+--------------------------------------------------
+AWS Global Accelerator 
+-----------------------
+GA is using AWS network for your requests and this is much faster than the normal internet and consistent. In this scenario, see slide 384 => user send request to DNS in route 53 for dct domain and it resolvess that to not the actual IP but it returns back 2 static anycase IP addresses which are for the GA ednpoint => Now any of these IPs will take you to any of edge location which is nearest to you => it will take you to the closest edge location and these edge locations are connected to the AWS global network using high performance global accelerators => and thus global network directs this call to nearest region  => everything till edge location happened on internet but after that since edge are part of AWS network, it will route to exact region in US very fast i.e. you can think of this as another use case of edge locations other than there use for caching for cloudfront. 
+
+Lab: Launch one instance with IAM role to s3 read only + user data as user-data-route-53 file but change the bucket name in the script and also add index.txt file in s3 bucket that you use, security group web-access with http at port 80 from anywhre (0.0.0.0) => launch 
+Create load balancer MyAlb of http/https type => select all AZ => Create accelerator MyAcc => select existing securty group as web acces => Create new TG1 target group => http 80, healthy threshold 2 interval 10 sec, select target group + next => In sometime try hitting ec2 public ip and load balancer dns name and it should open webpage =>   Do the same and create another instane now in diff region like sydney, again behind one ALB, test this as well when created =>
+
+Go to global accelerators => MyGA is already there which we created on the fly => in listeners click the one already present => Add endpoint group => choose region sydeney => next next => you should see in details of GA, static IP address and hit them and it will show the webpage => instructor delete rule in securty group of one and it started redirecting to other one which is does based on health checks and thus helath checks are important to setup. => disabled global accelerator + also delete it once done + delete ALB and EC2
+
+=> Above in lab, we have just gone to part form GA to origin but we can have not done things on route53 side since already done those stuff.
+
+
+
+
+
+
+
+

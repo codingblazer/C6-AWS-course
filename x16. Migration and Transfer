@@ -1,0 +1,46 @@
+AWS Migration tools
+-------------------
+Let say we have corporate data center having servers, databases, storage systems, NAS systems, file servers and more different systems running and we want to migrate these over to the AWS cloud. First, we have to connect our data center to AWS usually through VPN or direct connect but it can be through internet as well in this case. On AWS side, to help this migration, we have tools:
+
+Application discovery service: Tells what's running in your on-premises data center ++ metrics associated with them which helps you in capacity planning for CPU, memory etc on AWS side for those on-premises system ++ interrelations between them so that you can group applications and migrate groups then (ex- hercule server and hercule bulk are related and need to be migrated together or things will break).
+Now in our data center we can have either 1) virtualization stack running Vmware for which we use Agentless discovery by importing the OVA file in vCenter of Vmware having connector setup and thus connector will start populating data into the discovery service and this includes data like hostname, the IP addresses, the MAC addresses, disk resource, allocations, VM utilization, CPU, RAM, disk I/0 metrics. 2) We can have physical servers or virtual servers but running on Hyper-V rather than VMware. In this case, you have to use agent by installing it on these Windows and Linux servers which forward data to application discovery service and data is a bit different here like static config data, time series, performance data, network input/output and running processes.
+We can ask application discovery servers save above datas to S3 and we can query that data with Amazon Athena or QuickSight.
+See slide 765 for difference bw above 2 (IMP) => in discovery agent, it should be hyper V instead of Vmware there.
+Note: Exam question might give setup having combination of VMware + Hyper-V + physical and in that case, we will use the discovery connector agentless method for VMware and use the agent for the physical and for the Hyper-V.
+
+Lab: We can see Application discovery service in AWS which is inside migration hub we will study => discover and then agent or agentless file is given to download which you can use on your data center and once done integration which we wont do, you will have a file with things like
+your IP address, your MAC address, hostname, lots of VMware information, a number of processes, cores and so on.
+
+Database migration service DMS => migrate DBs to platforms like RDS, Aurora or Redshift, Amazon S3 or EFS file system. Now the source can be flexible i.e. it can be in on-premises or it can also be in the cloud itself like EC2 database to RDS, one RDS database to another RDS database, RDS to Aurora. It can homegenous migration like such as Oracle to Aurora, Oracle to PostgreSQL, Microsoft SQL to RDS MySQL i.e. bw relationals only AND it can be heterogenous like bw Oracle and Redshift which are not compatible and we need to convert the schema first using the schema conversion tool.
+Use cases: We can use it for creating copies of prod, etc DB and thus use that copy for dev and test purpose, can use DMS for combining multiple prod DBs into one, can also use it for continous replication i.e. copies for maybe disaster recovery purpose. 
+Lab: Go to DMS dashboard, create, choose replication instance type as dms.t3.medium, amount of allocated storage, multi AZ, security, nw config, maintainance, you can create a task which will choose the replication instance to run and also mention source and target endpoints like RDS, etc. 
+
+AWS Server Migration Service SMS => will actually migrate virtual servers in data center into EC2 instances like VMware vSphere, Microsoft Hyper-V/SCVMM and Azure virtual machines to Amazon EC2 (destination is always EC2). So on data center side, we can have some virtual server that could be moved to EC2 by installing a AWS SMS connector which sends data to server migration service. SMS will then automatically create Amazon machine images AMIs of these servers based on data and these AMIs are used to launch EC2 instances. If let say we have tied group of servers like database servers, app servers, and web servers and we want to move them all to EC2 in one go so nothing breaks => we can ask it to create CloudFormation template as well which can be used to launch them together.
+Lab: SMS console -> For connector in vCenter we need to download an OVA on our datacenter, for SCVMM/Hyper-V we can use a VHD file, for Azure we can use PowerShell Scripts. We first setup permissions, accounts and users, then deploy the migration connectors in data center and configure it by going to setup wizard of your VM. After that we can see these connectors in console.
+
+AWS Data synch => DataSync is a service we can use to migrate data from our file systems into AWS. We will have on data center, NAS or our file server running NFS or SMB and we will install DataSync software agent it will forward the data to data sync and data sync has various destinations like Amazon S3, Amazon FSx for Windows File Server, Amazon Elastic file system EFS. Data is encrypted in transit with TLS and can be encrypted in rest at destinations. The migration can scheduled and is automated.
+Lab: DataSync console => choose on-premises in AWS and get started => deploy the agent on data center which is ESXI on VMware, KVM, Hyper-V and EC2 and you can download the image by selecting => choose your service endpoint like FSX, your region and then once you setup on your data center you will get activation key which you can enter here. Under locations, we can choose where exactly we want it like particular S3 bucket and then create task to do it.
+
+Migration Hub => unified console where we see all of the different components like Discovery Service, SMS, DMS, and Data Sync and thus monitor all migrations from one place.
+
+Another option is to use a SnowCone device on-premises.
+
+SnowCone automatically has the data sync agent included, and it's able to then migrate data into these
+
+various storage systems on AWS as well.
+
+SNOW FAMILY: Snow family includes services like Snowball, Snowball Edge, SnowCone and Snowmobile which are all physical devices with tamper resistant enclosures and encryption where we can load our data and move it. These are mostly about migrating large volumes of data to AWS like tens/hundreds of TBs and also quickly which over internet will take long times. Exam might say this in a way that company has Internet link but it's very highly burdened and again this will fit the use case.
+
+Snowball => used for migrating large amount of data. These devices are either 80 terabytes or 50 terabytes called a petabytes scale.
+
+Snowball Edge compute optimised => optimized for edge computing block i.e. you might have factory somewhere without good Internet link but you are collecting data there => You can put data in edge compute optimized device for processing. Thus they process data at the edge and then store it for transportation. It can be used for block, object storage and optionally a GPU. Example use cases are: data collection, machine learning and processing and storage environments where you don't have that solid connectivity.
+Snowball Edge Storage optimised => this provides not just block nd object storage but object storage is based on s3 and thus storage optimised.
+Both of above edge snowball device has 100 terabytes, again known as petabytes scale.
+
+Snowmobile is literally a truck with a container on the back full of storage and is huge. It has device storage of 100 petabytes per Snowmobile device and also known as exabyte scale.
+
+SnowCone => this is smallest of all the devices and this is also optimized for edge computing, storage, and data transfer. It can be used with DataSync agent which we studies in last section by installing Datasync agent on SnowCone so we can use the SnowCone to send large amount of data to Amazon S3, EFS and FSx for Windows File Server which can be done offline (physically transport the device) or online (through agent).
+
+Performance enhancement (IMP FOR EXAM) => For this we use the Client software => this is installed on data center computer to transfer data to snowball devices easily by offering things like identifying, compressing, encrypting, and transferring the data to the device. It uses 256-bit encryption, which is managed with KMS and tamper-resistant enclosures. We use the latest client software to batch small files together and perform multiple copy operations in parallel (multiple terminals) + Also transferring the directories and not the files => these helps in achieving good performance.
+
+Use cases: Cloud data migration, Content distribution to clients from cloud, Tactical edge computing where you need to collect data and provide some kind of computing utility at the edge, run machine learning models directly on the device, perform some kind of computing like pre-processing, tagging, compression, of data before transfer. 
