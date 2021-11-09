@@ -8,7 +8,7 @@ can be attached to a user or group or role or Resource but generally in case of 
 a) inline => in this case policy is 1:1 to principal i.e. policy cant be applied to multiple principals like multiple roles but only one role or one user or one group. If the principal is deleted, the policy will also delete. 
 b) managed by AWS or managed by customer => these are stored on AWS or customer end => these are stored separately and are not attached inline to one principle and thus if principle delete, policy still remain => can be applied to many principles at same time. 
 
-2. Resource based plicy => applied to resources like S3, dynamoDb that this db is allowed to this users list, etc. We mention arn of users this resource can be used by + what all actions we are allowing for them on this resource + specific resource object arn i.e. s3 bucket arn.
+2. Resource based policy => applied to resources like S3, dynamoDb that this db is allowed to this users list, etc. We mention arn of users this resource can be used by + what all actions we are allowing for them on this resource + specific resource object arn i.e. s3 bucket arn.
 
 Principles 
 ------------

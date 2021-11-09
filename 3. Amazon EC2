@@ -82,35 +82,33 @@ Create another instance in diff AZ i.e. subnet from diff AZ => Go to elastic IPs
 Now also, this is 1:1 mapping and called NAT (Network address translation), done by gateway.
 
 4. Public and Private subnets: See slide 99 =>  Now as you can see we have a public and private subnet inside the VPC. Now each subnet has a routing table associated with it + a configuration which tells whether public IP should be provided to the nw adapter using this subnet by default. Public subnet => See the routing table for public subnet and in first routing rule we are saying that for any packet being sent with destination IP that is lying in the range of IPs defined by this CIDR block (CIDR block is range of IPs and in this case it belongs to all IPs inside the VPC i.e. 172.31.0.0/16), in this rule we are sending it locally meaning this traffic is for internal communication and there is VPC router which takes care of taking these routing action and it will send it to correct IP internally. Second rule says that any other IP (0.0.0.0 means any) should go to internet gateway and thus request will go to internet and get answered. 
-Next thing with this public subnet will be the configuration in which we will say it to assign public IP to any adapter using this subnet.
+Next thing with this public subnet will be the configuration in which we will say it to assign public IP to any adapter using this subnet since this is public subnet and every IP in this public subnet will have public IP (though temp one) when used with something like nw adapter.
 
 Private subnet => In the routing table, we can see that we have just one rule for CIDR block and since this is private, we wont give rule for internet gateway. Also, for the configuration we will say that we don't want to give public IP to any nw adapter attached to this subnet since those nw adapter can communicate internally only since private and thus public IP of no use. Also, this tells that for private subnet, even if routing table has internet gateway rule added, because of this configuration it would not have worked i.e. internet gateway would have rejected any packet coming from private IP whoose mapping to public IP it doesnt have.
 
-Bastion Hosts => Now though private subnets can't use internet gateway but private routing table has rule for local IPs i.e. private subnet can talk to any other subnet inside VPC i.e. even if that subnet is from another AZ since they are in same VPC. Now we can send our request from private subnet to some EC2 host/nw adapter in public subnet and that host forward request to internet gateway which will pass and response this host sends back to private subnet. This host is called bastion host and this whole thing can be achieved using VPC router.
+Now though private subnets can't use internet gateway but private routing table has rule for local IPs i.e. private subnet can talk to any other subnet inside VPC i.e. even if that subnet is from another AZ since they are in same VPC. Now we can send our request from private subnet to some EC2 host/nw adapter in public subnet and that host forward request to internet gateway which will pass and response this host sends back to private subnet. This is called Nat instance which we will study in detail later.
+If using same above concept, we have our ec2 in private subnet and we want to jump to it i.e. or connect using ssh to it, we can use above same concept and when using ec2 in public subnet as jumpover to private instance, host in public subnet is called bastion host and this whole thing can be achieved using VPC router. 
 
 Labs: Go to VPC service inside networking from AWS home => in VPCs list you will see one VPC which is default VPC in that region. See subnets from left and you will see 5-6 default subnets, one for each AZ inside VPC. scroll horizontally to right and see column "Auto assign public Ipv4" to yes for all subnets meaning these are public subnets which we can verify from routing tables as well => go to routing tables from left and we will see one routing table because these are created at VPC level for VPC router to use =>  Insidde details of this table you will see rules like that for public subnet we saw earlier. You can find internet gatway id in routing table and see in IG list we have one gateway again because it is at VPC level and that gateway has been given VPC id as well. 
-
 Lets create private subnet => inside north virginia region => choose VPC, choose AZ as 1a and name subnet like private-def-1a => For CIDR enter '172.31.96.0/20' (this is CIDR for subnet we are creating but remember CIDR for routing internally for VPC will be different and for entire VPC) => how to give subnet CIDR => go to all subnets in this VPC and see that they have CIDR as  172.31.0.0, 172.31.16.0...172.31.80.0, increasing by 16 and that's how (we will read more about this later) => Create
 In list of subnets you should see this and on auto assign column will say NO because that is default value when you create any subnet. 
 Now we have to assocaite this subnet to private routing table => create routing table, give name => select this routing table and go to subnet assiciations => edit => select private subnet 
-
 Launch EC2 instances in public and private subnets => In EC2 config page while launching select the correct subnet for both 
-
 Let's try to go inside private EC2 instance => we will ssh into public and from there ssh into private instance => now we will need keys of private inside public instance and thus we can do that using ssh forwarding like:
-
 ssh-add -K privateInst.pem => when in public instance and trying to ssh private, there we wont be needed to provide key of private after this 
 ssh -A ec2-user@<ip of public> => go inside public 
 ssh ec2-user@<private IP> => go inside private without adding any key since you already configured it with ssh
-
 Now here we are connecting our machine (internet or outside VPC) to private instance and thus curl of google i.e. internet on private instance should not pass because bastion host is not set up. Let's see how we do it. 
 
 5. Nat Gateways and NAT instances => Now why would we want private subnet to connect to internet => there are some instances which we want that absolutely no one from outside can access and thus we can't have internet gateway but these instances might want to connect to internet to download software etc => we make them private + access internet i.e. only outbounding through public subnet => this way we can have one directional flow
 Public subnet is bidirectional flow
 Completely private is no direction flow 
 
-Nat Gateway => this is used to talk on behalf of private subnet to internet gateway => now for this to talk to IG, it needs to be on public subnet and thus nat gateway sits inside public subnet with elastic static IP and takes requests from private subnet and sends to IG. For this to work, inside private subnet route table, we add entry for o.o.o.o destination i.e. any => take it to nat gateway and nat gateway function is to forward these packets to VPC router and VPC router will see public route table this time and for any destination traffic, it will go to IG and hence the internet.
+Nat Gateway => See slide 103 => this is used to talk on behalf of private subnet to internet gateway => now for this to talk to IG, it needs to be on public subnet and thus nat gateway sits inside public subnet with elastic static IP and takes requests from private subnet and sends to IG. For this to work, inside private subnet route table, we add entry for o.o.o.o destination i.e. any => take it to nat gateway and nat gateway function is to forward these packets to VPC router and VPC router will see public route table this time and for any destination traffic, it will go to IG and hence the internet.
 
 Nat instance => Used much before nat gateways => A nat instance like gateway will sit inside the public subnet and it uses a AMI amzn-ami-vpc-nat + we must disabled source and destination checks (VIMP for exam) => this is because, normally any instance will get response only when source sent to it specifically i.e. EC2 was destination and EC2 can sends packet only when it is the one sending it and hence EC2 address is in source => but in this case, EC2 is acting as forwarder of traffic and hence, source is private IP and destination is internet IP and thus, source and destination check which checks that one of source/destination should EC2 instance itself must be disabled because otherwise the check will fail. 
+Note that Nat instance is extension of bastion host i.e. bastion host is used to jump to private instance while nat instance also allows private instance to connect to internet. 
+
 
 Lab: In our VPC dashboard go to NAT gateway and create => remember to choose public subet 1a => public connectivity => Allocate elastic IP => create > go to route table now and select private route table => Now add rule for 0.0.0.0 to NAT gatway we created => If you now ssh to private subnet instance, ping google should pass.   
 
@@ -120,7 +118,7 @@ EC2 Lifecycle
 ---------------
 See slide 109 => See the different lifecyle states based on actions you perform => stop and stop hibernate are only possible if you are using the EBS volume with your EC2 => if you are using just instance store i.e. no persisitent volume => these wont be available to you. If you stop the EC2, you can then either terminate it from here or start it => terminate means you can't start it back ever and start means that your EC2 will start with same EBS volume and thus you can see data being persistent. 
 
-Stop instance => EBS will remain attached and hence only that will be chargeable + Data is lost in RAM, private IP remains same but public is changed, instance is moved to diff host server and thus if you know that host server this virtual instance is part of is going down, you can stop and start and it will start in diff host server.
+Stop instance => EBS will remain attached and hence only that will be chargeable + Data is lost in RAM, private IP remains same but public is changed, instance is moved to diff host server and thus one application is that if you know host server of this instance is going down somwhow, you can stop and start this instance and by rule, it will start in diff host server.
 
 Hibernating instance => same as stopping but the data of RAM is not lost because that is also stored in EBS => applies to on demand or reserved linux instances and hibernation must be enabled during the launch of instance => If stopped and started using hibernation, content of RAM are reloaded and this data is deleted from EBS so EBS is back to actual data and all the processes that were running are resumed, instance ID is retained.
 
@@ -152,8 +150,7 @@ Exam Cram
 Good video for revision
 Cheatsheet => https://digitalcloud.training/certification-training/aws-solutions-architect-associate/compute/amazon-ec2/
 
-Todo: From architecture patterns and cram, it seems you got wrong understanding of bastion hosts and they are used for ssh into private subnets for administrators to monitor and this is not possible with NAT gateways but with NAT EC2 servers => check this and make corrections
-Especially see the slide for difference between nat gateway and nat ec2 instance which is somehow relaated to bastion hosts as well
+See the slide 105 for difference between nat gateway and nat ec2 instance which is somehow relaated to bastion hosts as well
 
 From quiz => EC2 instance give us key pair for ssh which is NOT access key and secret => it is public key for private key of the EC2 instance to allow ssh.
 

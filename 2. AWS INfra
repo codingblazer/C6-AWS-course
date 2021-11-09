@@ -1,4 +1,4 @@
-AWS Global Infra 
+                   AWS Global Infra 
 
 1. Region => Geo area with 2 or more AZs, isolated from other regions. => 25 regions currently
 2. AZ => One or more data centers that are physically separate and isloated from other AZs. They are connected with low latency highly available high bandwidth links => you can deploy your resources within a region but into separate AZ for high availability and redundancy => if outage in one AZ, you can still acccess other AZ which in turn is linked to outaged AZ as well. 
