@@ -26,7 +26,7 @@ Classes: Now some of the CIDRs we have reserved as classes =>
 
 Class A => /8 in CIDR => If you want to take first 8 bits as network for your IPs, you can't because such IPs are classified into class A => all IPs in such class have ranges like :
 
-8 bits network => 2^8 -2 networks = 126 networks (first and last are reserved and thus -2) => each network can have 2^24 hosts = 16777214 hosts meaning if network dot notation is 10 => this network will have starting address of hosts as 10.0.0.1 (0.0.0 is reserved always inside network or broadcast address i.e. if destination is this IP address, packet will be sent to all IPs inside the network) + end address inside this network will be 10.255.255.254 (again end address is reserved).
+8 bits network => 2^8 -2 networks = 126 networks (first and last are reserved and thus -2) and each network of these 126, can have 2^24 hosts = 16777214 hosts Ex- if in network dot notation, first oclet is 10 => this network will have starting address of hosts as 10.0.0.1 (0.0.0 is reserved always inside network or broadcast address i.e. if destination is this IP address, packet will be sent to all IPs inside the network) + end address inside this network will be 10.255.255.254 (again end address is reserved).
 
 In class A, 10.0.0.0 to 10.255.255.255 IP addresses are reserved for private use and can't be internet facing and all classes have such private addresses.
 
@@ -36,7 +36,7 @@ Class C => /24 => 192.168.0.0 to 192.168.0.255 are private addresses and can't b
 
 VPC Overview
 -------------
-VPC is logically isolated portion in region (like your own virtual data center) and we can multiple VPCs inside a region (max 5 which can be increased by request) + they might not be isolated by hardware. In Every VPC we have to give block of IP addresses that it will have  and that block is in CIDR notation => we can give something like 10.0.0.0/16 CIDR block to VPC (we will see what IP addresses this CIDR block given to VPC has in next section). VPC has AZs of region inside them and inside every AZ, we can have multiple subnets, public or private but subnet can't be across AZs. Every subnet that we create has to use block of IP addresses that hosts inside subnet will use and these IP addresses must be from the VPC CIDR block only. 
+VPC is logically isolated portion in region (like your own virtual data center) and we can multiple VPCs inside a region (max 5 which can be increased by request) + they might not be isolated by hardware. In Every VPC we have to give block of IP addresses that it will have  and that block is in CIDR notation => we can give something like 10.0.0.0/16 CIDR block to VPC (we will see what IP addresses this CIDR block has in next section). VPC has AZs of region inside them and inside every AZ, we can have multiple subnets, public or private but subnet can't be across AZs. Every subnet that we create has to use block of IP addresses that hosts inside subnet will use and these IP addresses must be from the VPC CIDR block only. 
 There is a VPC router which has a routing table attached which takes the packets coming from hosts inside subnet and sees the destination address and based on that routes the packet either to some other subnet inside the VPC in same or other AZ, or that packet can be directed to outside internet and VPC routers sends packet to internet gateway which it is connected to as well. 
 
 VPC is isolated from other virtual networks in AWS and provides complete control over networking inside VPC like VPC IP range selectiong using CIDR, subnet creation, route table configuration, and internet gateways. A default VPC is always created in account with public subnet in all AZ inside that region.
@@ -58,7 +58,7 @@ CIDR block = range of IPs defined in form of /
 4. The first four and last host IP in CIDR block are not usable as they are used by AWS.
 
 5. It is recommended to use private IP ranges for your CIDR block i.e. we discussed that each class has some private IPs not open to internet i.e.
-Class A (/8) private IPs are => 10.0.0.0 to 10.255.255.255 => As per rule one, we can have /16 to /18 only => we can choose CIDR block as 10.0 or 10.1 or 10.2 or ....10.255 => and whatever we choose among these as CIDR block, it will have 16 hosts bits = 2^16 hosts or IP range. 
+Class A (/8) private IPs are => 10.0.0.0 to 10.255.255.255 => As per rule one mentioned above, we can have /16 (2 oclets) to /28 only => we can choose CIDR block as 10.0 or 10.1 or 10.2 or ....10.255 => and whatever we choose among these as CIDR block, it will have 16 hosts bits = 2^16 hosts or IP range. 
 This class is mostly used with VPCs CIDR blocks because they provide large number of CIDR block options with large number of hosts.
 If you know you want to be using this much host, you can instead choose /17 or /20 as well => in that case, take any value of first 20 bits such that they fall in private range and thus your VPC have hosts = 12 bits = 2^12 but we wont need it usually.
 
